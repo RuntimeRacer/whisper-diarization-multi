@@ -40,7 +40,9 @@ class DiarizationDeviceThread(threading.Thread):
         self.msdd_model = None
         self.msdd_temp_path = None
         self.punctuation_model = None
-        self.alignment_models = {}
+        self.alignment_model = None
+        self.alignment_model_meta = None
+        self.alignment_model_lang = None
         self.global_args = global_args
 
     def run(self) -> None:
@@ -145,20 +147,15 @@ class DiarizationDeviceThread(threading.Thread):
 
         if info.language in wav2vec2_langs:
             # Load alignment model only once to speed up processing
-            if info.language not in self.alignment_models:
-                alignment_model, metadata = whisperx.load_align_model(
+            # However, if different languages are detected in same dataset, model needs to be hot-switched
+            if info.language != self.alignment_model_lang:
+                self.alignment_model, self.alignment_model_meta = whisperx.load_align_model(
                     language_code=info.language, device=device
                 )
-                self.alignment_models[info.language] = {
-                    "model": alignment_model,
-                    "meta": metadata
-                }
-            else:
-                alignment_model = self.alignment_models[info.language]["model"]
-                metadata = self.alignment_models[info.language]["meta"]
+                torch.cuda.empty_cache()
 
             result_aligned = whisperx.align(
-                whisper_results, alignment_model, metadata, vocal_target, device
+                whisper_results, self.alignment_model, self.alignment_model_meta, vocal_target, device
             )
             if len(result_aligned["word_segments"]) > 0:
                 word_timestamps = filter_missing_timestamps(result_aligned["word_segments"])
@@ -177,7 +174,7 @@ class DiarizationDeviceThread(threading.Thread):
         except (ValueError, IndexError) as e:
             logging.warning("File {0} could not be processed, likely no speech data. Error: {1} ".format(vocal_target, e))
             logging.warning("skipping...")
-
+            return
 
         speaker_ts = []
         with open(os.path.join(self.msdd_temp_path, "pred_rttms", "mono_file.rttm"), "r") as f:
