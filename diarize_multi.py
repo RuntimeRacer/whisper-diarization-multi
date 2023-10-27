@@ -163,7 +163,7 @@ class DiarizationDeviceThread(threading.Thread):
             self.diarize_audio(audio)
             progress_bar.update(1)
             # Clear cache after each run
-            torch.cuda.empty_cache()
+            # torch.cuda.empty_cache()
 
         # Finalize Progress bar
         progress_bar.close()
