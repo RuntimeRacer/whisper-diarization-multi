@@ -18,6 +18,107 @@ import subprocess
 import logging
 
 
+# Initialize parser
+parser = argparse.ArgumentParser()
+
+parser.add_argument(
+    "-d", "--audio-dir", dest="audio_dir", help="name of the folder containing the target audio files", required=True
+)
+
+parser.add_argument(
+    "-o", "--output-dir", dest="output_dir", help="name of the folder containing the processed audio and transcript files"
+)
+
+parser.add_argument(
+    "-p", "--pattern",
+    dest="pattern",
+    default="*.mp3",
+    help="pattern of the audio files to search for",
+)
+
+parser.add_argument(
+    "-sd", "--include-subdirs",
+    action="store_true",
+    dest="include_subdirs",
+    default=False,
+    help="Suppresses Numerical Digits."
+    "This helps the diarization accuracy but converts all digits into written text.",
+)
+
+parser.add_argument(
+    "--no-stem",
+    action="store_false",
+    dest="stemming",
+    default=True,
+    help="Disables source separation."
+    "This helps with long files that don't contain a lot of music.",
+)
+
+parser.add_argument(
+    "--suppress_numerals",
+    action="store_true",
+    dest="suppress_numerals",
+    default=False,
+    help="Suppresses Numerical Digits."
+    "This helps the diarization accuracy but converts all digits into written text.",
+)
+
+parser.add_argument(
+    "--no-nemo",
+    action="store_false",
+    dest="nemo",
+    default=True,
+    help="Disable NeMo."
+    "Disables NeMo for Speaker Diarization and relies completely on Whisper for Transcription.",
+)
+
+parser.add_argument(
+    "--whisper-model",
+    dest="model_name",
+    default="medium.en",
+    help="name of the Whisper model to use",
+)
+
+parser.add_argument(
+    "--devices",
+    dest="devices",
+    default="cuda" if torch.cuda.is_available() else "cpu",
+    help="if you have one or multiple GPUs use 'cuda' for all cuda devices, or 'cuda:0' for single device, otherwise 'cpu'",
+)
+
+parser.add_argument(
+    "-ct", "--compute-type",
+    dest="compute_type",
+    default="float16" if torch.cuda.is_available() else "int8",
+    help="number of threads to use per device",
+)
+
+parser.add_argument(
+    "-t", "--threads",
+    dest="threads",
+    type=int,
+    default=1,
+    help="number of threads to use per device",
+)
+
+parser.add_argument(
+    "-s", "--split-audio",
+    action="store_true",
+    dest="split_audio",
+    default=False,
+    help="Split Audio files on voice activity and speaker. Does not generate a .srt file.",
+)
+
+parser.add_argument(
+    "-sr", "--sample-rate",
+    dest="sample_rate",
+    default=24000,
+    help="Target sample rate for splitted output files (if split enabled)",
+)
+
+args = parser.parse_args()
+
+
 class DiarizationDeviceThread(threading.Thread):
 
     def __init__(
@@ -51,7 +152,8 @@ class DiarizationDeviceThread(threading.Thread):
             compute_type=self.global_args.compute_type
         )
         # Initialize NeMo Diarization model
-        self.initialize_nemo()
+        if self.global_args.nemo:
+            self.initialize_nemo()
         # Initialize Punctuation model - Properly
         self.initialize_punctuation()
         # Create a progress bar for this thread
@@ -147,7 +249,7 @@ class DiarizationDeviceThread(threading.Thread):
         for segment in segments:
             whisper_results.append(segment._asdict())
 
-        if info.language in wav2vec2_langs:
+        if self.global_args.nemo and info.language in wav2vec2_langs:
             try:
                 # Load alignment model only once to speed up processing
                 if info.language not in self.alignment_models:
@@ -176,27 +278,30 @@ class DiarizationDeviceThread(threading.Thread):
                 for word in segment["words"]:
                     word_timestamps.append({"word": word[2], "start": word[0], "end": word[1]})
 
-        # Speaker Labeling using NeMo
-        # convert audio to mono for NeMo combatibility
-        sound = AudioSegment.from_file(vocal_target).set_channels(1)
-        sound.export(os.path.join(self.msdd_temp_path, "mono_file.wav"), format="wav")
-        try:
-            self.msdd_model.diarize()
-        except (ValueError, IndexError, KeyError) as e:
-            logging.warning("File {0} could not be processed, likely no speech data. Error: {1} ".format(vocal_target, e))
-            logging.warning("skipping...")
-            return
+        if self.global_args.nemo:
+            # Speaker Labeling using NeMo
+            # convert audio to mono for NeMo combatibility
+            sound = AudioSegment.from_file(vocal_target).set_channels(1)
+            sound.export(os.path.join(self.msdd_temp_path, "mono_file.wav"), format="wav")
+            try:
+                self.msdd_model.diarize()
+            except (ValueError, IndexError, KeyError) as e:
+                logging.warning("File {0} could not be processed, likely no speech data. Error: {1} ".format(vocal_target, e))
+                logging.warning("skipping...")
+                return
 
-        speaker_ts = []
-        with open(os.path.join(self.msdd_temp_path, "pred_rttms", "mono_file.rttm"), "r") as f:
-            lines = f.readlines()
-            for line in lines:
-                line_list = line.split(" ")
-                s = int(float(line_list[5]) * 1000)
-                e = s + int(float(line_list[8]) * 1000)
-                speaker_ts.append([s, e, int(line_list[11].split("_")[-1])])
+            speaker_ts = []
+            with open(os.path.join(self.msdd_temp_path, "pred_rttms", "mono_file.rttm"), "r") as f:
+                lines = f.readlines()
+                for line in lines:
+                    line_list = line.split(" ")
+                    s = int(float(line_list[5]) * 1000)
+                    e = s + int(float(line_list[8]) * 1000)
+                    speaker_ts.append([s, e, int(line_list[11].split("_")[-1])])
 
-        wsm = get_words_speaker_mapping(word_timestamps, speaker_ts, "start")
+            wsm = get_words_speaker_mapping(word_timestamps, speaker_ts, "start")
+        else:
+            wsm = get_words_mapping(word_timestamps)
 
         if info.language in punct_model_langs:
             # restoring punctuation in the transcript to help realign the sentences
@@ -220,22 +325,34 @@ class DiarizationDeviceThread(threading.Thread):
                     if word.endswith(".."):
                         word = word.rstrip(".")
                     word_dict["word"] = word
-
-            wsm = get_realigned_ws_mapping_with_punctuation(wsm)
+            if self.global_args.nemo:
+                wsm = get_realigned_ws_mapping_with_punctuation(wsm)
         else:
             logging.warning(
                 f"Punctuation restoration is not available for {info.language} language."
             )
 
-        ssm = get_sentences_speaker_mapping(wsm, speaker_ts)
-
-        if not self.global_args.split_audio:
-            with open(f"{os.path.splitext(audio)[0]}.txt", "w", encoding="utf-8-sig") as f:
-                get_speaker_aware_transcript(ssm, f)
-            with open(f"{os.path.splitext(audio)[0]}.srt", "w", encoding="utf-8-sig") as srt:
-                write_srt(ssm, srt)
+        if self.global_args.nemo:
+            ssm = get_sentences_speaker_mapping(wsm, speaker_ts)
         else:
-            split_by_vad_and_speaker(
+            ssm = get_sentences(wsm)
+
+        if self.global_args.nemo:
+            if not self.global_args.split_audio:
+                with open(f"{os.path.splitext(audio)[0]}.txt", "w", encoding="utf-8-sig") as f:
+                    get_speaker_aware_transcript(ssm, f)
+                with open(f"{os.path.splitext(audio)[0]}.srt", "w", encoding="utf-8-sig") as srt:
+                    write_srt(ssm, srt)
+            else:
+                split_by_vad_and_speaker(
+                    audio,
+                    self.global_args.audio_dir,
+                    self.global_args.output_dir,
+                    ssm,
+                    self.global_args.sample_rate
+                )
+        else:
+            save_transcript(
                 audio,
                 self.global_args.audio_dir,
                 self.global_args.output_dir,
@@ -243,97 +360,6 @@ class DiarizationDeviceThread(threading.Thread):
                 self.global_args.sample_rate
             )
 
-
-# Initialize parser
-parser = argparse.ArgumentParser()
-
-parser.add_argument(
-    "-d", "--audio-dir", dest="audio_dir", help="name of the folder containing the target audio files", required=True
-)
-
-parser.add_argument(
-    "-o", "--output-dir", dest="output_dir", help="name of the folder containing the processed audio and transcript files"
-)
-
-parser.add_argument(
-    "-p", "--pattern",
-    dest="pattern",
-    default="*.mp3",
-    help="pattern of the audio files to search for",
-)
-
-parser.add_argument(
-    "-sd", "--include-subdirs",
-    action="store_true",
-    dest="include_subdirs",
-    default=False,
-    help="Suppresses Numerical Digits."
-    "This helps the diarization accuracy but converts all digits into written text.",
-)
-
-parser.add_argument(
-    "--no-stem",
-    action="store_false",
-    dest="stemming",
-    default=True,
-    help="Disables source separation."
-    "This helps with long files that don't contain a lot of music.",
-)
-
-parser.add_argument(
-    "--suppress_numerals",
-    action="store_true",
-    dest="suppress_numerals",
-    default=False,
-    help="Suppresses Numerical Digits."
-    "This helps the diarization accuracy but converts all digits into written text.",
-)
-
-parser.add_argument(
-    "--whisper-model",
-    dest="model_name",
-    default="medium.en",
-    help="name of the Whisper model to use",
-)
-
-parser.add_argument(
-    "--devices",
-    dest="devices",
-    default="cuda" if torch.cuda.is_available() else "cpu",
-    help="if you have one or multiple GPUs use 'cuda' for all cuda devices, or 'cuda:0' for single device, otherwise 'cpu'",
-)
-
-parser.add_argument(
-    "-ct", "--compute-type",
-    dest="compute_type",
-    default="float16" if torch.cuda.is_available() else "int8",
-    help="number of threads to use per device",
-)
-
-parser.add_argument(
-    "-t", "--threads",
-    dest="threads",
-    type=int,
-    default=1,
-    help="number of threads to use per device",
-)
-
-parser.add_argument(
-    "-s", "--split-audio",
-    action="store_true",
-    dest="split_audio",
-    default=False,
-    help="Split Audio files on voice activity and speaker. Does not generate a .srt file.",
-)
-
-parser.add_argument(
-    "-sr", "--sample-rate",
-    dest="sample_rate",
-    default=24000,
-    help="Target sample rate for splitted output files (if split enabled)",
-)
-
-args = parser.parse_args()
 
 # Ensure output dir
 if not args.output_dir or args.output_dir in (None, ""):

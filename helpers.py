@@ -112,6 +112,20 @@ def get_words_speaker_mapping(wrd_ts, spk_ts, word_anchor_option="start"):
     return wrd_spk_mapping
 
 
+def get_words_mapping(wrd_ts):
+    wrd_mapping = []
+    for wrd_dict in wrd_ts:
+        ws, we, wrd = (
+            int(wrd_dict["start"] * 1000),
+            int(wrd_dict["end"] * 1000),
+            wrd_dict["word"],
+        )
+        wrd_mapping.append(
+            {"word": wrd, "start_time": ws, "end_time": we}
+        )
+    return wrd_mapping
+
+
 sentence_ending_punctuations = ".?!"
 
 
@@ -238,6 +252,39 @@ def get_sentences_speaker_mapping(word_speaker_mapping, spk_ts):
     return snts
 
 
+def get_sentences(word_mapping):
+    sentence_checker = nltk.tokenize.PunktSentenceTokenizer().text_contains_sentbreak
+    snts = []
+
+    snt = None
+
+    for wrd_dict in word_mapping:
+        wrd = wrd_dict["word"]
+        s, e = wrd_dict["start_time"], wrd_dict["end_time"]
+        if not snt:
+            snt = {
+                "start_time": s,
+                "end_time": e,
+                "text": "",
+            }
+
+        if sentence_checker(snt["text"] + " " + wrd):
+            snts.append(snt)
+            snt = {
+                "start_time": s,
+                "end_time": e,
+                "text": "",
+            }
+        else:
+            snt["end_time"] = e
+        snt["text"] += wrd + " "
+
+    if snt:
+        snts.append(snt)
+
+    return snts
+
+
 def get_speaker_aware_transcript(sentences_speaker_mapping, f):
     previous_speaker = sentences_speaker_mapping[0]["speaker"]
     text = sentences_speaker_mapping[0]["text"]
@@ -340,6 +387,47 @@ def split_by_vad_and_speaker(base_file, base_dir, output_dir, transcript_data, s
                 str(utt_audio_name)
             ]
             s = subprocess.call(convert_args)
+
+
+def save_transcript(base_file, base_dir, output_dir, sentences, sample_rate):
+    # get base file name
+    base_name = os.path.splitext(base_file)[0]
+    base_name = base_name.replace(base_dir, output_dir)
+
+    for sentence_idx, sentence_segment in enumerate(sentences):
+        snt_audio_name = "{0}_{1}.flac".format(base_name, sentence_idx)
+        snt_transcript_name = "{0}_{1}_transcript.txt".format(base_name, sentence_idx)
+
+        # Create utterance file if it doesen't exist
+        dest_utterance_path = Path(snt_transcript_name)
+        if not dest_utterance_path.is_file():
+            with open(dest_utterance_path, "w", encoding="utf-8-sig") as out:
+                out.write(sentence_segment["text"].strip())
+
+        # if the file already exists, skip conversion
+        dest_audio_path = Path(snt_audio_name)
+        if dest_audio_path.is_file():
+            continue
+
+        # Process using FFMPEG
+        convert_args = [
+            "/usr/bin/ffmpeg",
+            "-y",
+            "-loglevel",
+            "fatal",
+            "-i",
+            str(base_file),
+            "-ss",
+            format_timestamp(sentence_segment['start_time'], always_include_hours=True),
+            "-t",
+            format_timestamp(sentence_segment['end_time'], always_include_hours=True),
+            "-ar",
+            str(sample_rate),
+            "-threads",
+            str(1),
+            str(snt_audio_name)
+        ]
+        s = subprocess.call(convert_args)
 
 
 def find_numeral_symbol_tokens(tokenizer):
