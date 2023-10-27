@@ -303,7 +303,7 @@ class DiarizationDeviceThread(threading.Thread):
         else:
             wsm = get_words_mapping(word_timestamps)
 
-        if info.language in punct_model_langs:
+        if info.language in punct_model_langs and len(wsm) > 0:
             # restoring punctuation in the transcript to help realign the sentences
             words_list = list(map(lambda x: x["word"], wsm))
             labled_words = self.punctuation_model.predict(words_list)
