@@ -73,6 +73,15 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "--no-punctuation",
+    action="store_false",
+    dest="punctuation",
+    default=True,
+    help="Disable Punctuation Restore."
+    "Disables punctuation restauration and relies completely on Whisper for Transcription.",
+)
+
+parser.add_argument(
     "--whisper-model",
     dest="model_name",
     default="medium.en",
@@ -155,7 +164,8 @@ class DiarizationDeviceThread(threading.Thread):
         if self.global_args.nemo:
             self.initialize_nemo()
         # Initialize Punctuation model - Properly
-        self.initialize_punctuation()
+        if self.global_args.punctuation:
+            self.initialize_punctuation()
         # Create a progress bar for this thread
         progress_bar = tqdm(total=len(self.files), desc=f"Thread {self.proc_id}")
         # Process audio one by one in this thread
@@ -303,34 +313,35 @@ class DiarizationDeviceThread(threading.Thread):
         else:
             wsm = get_words_mapping(word_timestamps)
 
-        if info.language in punct_model_langs and len(wsm) > 0:
-            # restoring punctuation in the transcript to help realign the sentences
-            words_list = list(map(lambda x: x["word"], wsm))
-            labled_words = self.punctuation_model.predict(words_list)
+        if self.global_args.punctuation:
+            if info.language in punct_model_langs and len(wsm) > 0:
+                # restoring punctuation in the transcript to help realign the sentences
+                words_list = list(map(lambda x: x["word"], wsm))
+                labled_words = self.punctuation_model.predict(words_list)
 
-            ending_puncts = ".?!"
-            model_puncts = ".,;:!?"
+                ending_puncts = ".?!"
+                model_puncts = ".,;:!?"
 
-            # We don't want to punctuate U.S.A. with a period. Right?
-            is_acronym = lambda x: re.fullmatch(r"\b(?:[a-zA-Z]\.){2,}", x)
+                # We don't want to punctuate U.S.A. with a period. Right?
+                is_acronym = lambda x: re.fullmatch(r"\b(?:[a-zA-Z]\.){2,}", x)
 
-            for word_dict, labeled_tuple in zip(wsm, labled_words):
-                word = word_dict["word"]
-                if (
-                        word
-                        and labeled_tuple[1] in ending_puncts
-                        and (word[-1] not in model_puncts or is_acronym(word))
-                ):
-                    word += labeled_tuple[1]
-                    if word.endswith(".."):
-                        word = word.rstrip(".")
-                    word_dict["word"] = word
-            if self.global_args.nemo:
-                wsm = get_realigned_ws_mapping_with_punctuation(wsm)
-        else:
-            logging.warning(
-                f"Punctuation restoration is not available for {info.language} language and empty utterances."
-            )
+                for word_dict, labeled_tuple in zip(wsm, labled_words):
+                    word = word_dict["word"]
+                    if (
+                            word
+                            and labeled_tuple[1] in ending_puncts
+                            and (word[-1] not in model_puncts or is_acronym(word))
+                    ):
+                        word += labeled_tuple[1]
+                        if word.endswith(".."):
+                            word = word.rstrip(".")
+                        word_dict["word"] = word
+                if self.global_args.nemo:
+                    wsm = get_realigned_ws_mapping_with_punctuation(wsm)
+            else:
+                logging.warning(
+                    f"Punctuation restoration is not available for {info.language} language and empty utterances."
+                )
 
         if self.global_args.nemo:
             ssm = get_sentences_speaker_mapping(wsm, speaker_ts)
