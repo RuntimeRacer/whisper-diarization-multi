@@ -365,10 +365,10 @@ remainder = files_total % total_threads
 for d_id, device in enumerate(selected_devices):
     for t_id in range(0, args.threads):
         # Get the subset of files for the thread
-        start_idx = (d_id*2 + t_id) * files_per_thread
+        start_idx = (d_id*args.threads + t_id) * files_per_thread
         end_idx = start_idx + files_per_thread
-        if (end_idx + remainder) == files_total:
-            end_idx += remainder
+        if t_id < remainder:
+            end_idx += 1
         files_subset = file_list[start_idx:end_idx]
 
         # Init the thread
