@@ -9,7 +9,10 @@ from faster_whisper import WhisperModel
 from tqdm import tqdm
 import whisperx
 import torch
+from pydub import AudioSegment
+from nemo.collections.asr.models.msdd_models import NeuralDiarizer
 from deepmultilingualpunctuation import PunctuationModel
+from transformers import pipeline
 import re
 import subprocess
 import logging
@@ -34,6 +37,9 @@ class DiarizationDeviceThread(threading.Thread):
         # Init the worker
         self.active = False
         self.whisper_model = None
+        self.msdd_model = None
+        self.msdd_temp_path = None
+        self.punctuation_model = None
         self.alignment_models = {}
         self.global_args = global_args
 
@@ -42,9 +48,12 @@ class DiarizationDeviceThread(threading.Thread):
         # Initialize Whisper
         self.initialize_whisper(
             model_name=self.global_args.model_name,
-            device=self.device,
             compute_type=self.global_args.compute_type
         )
+        # Initialize NeMo Diarization model
+        self.initialize_nemo()
+        # Initialize Punctuation model - Properly
+        self.initialize_punctuation()
         # Create a progress bar for this thread
         progress_bar = tqdm(total=len(self.files), desc=f"Thread {self.proc_id}")
         # Process audio one by one in this thread
@@ -53,10 +62,14 @@ class DiarizationDeviceThread(threading.Thread):
             progress_bar.update(1)
         progress_bar.close()
 
-    def initialize_whisper(self, model_name="medium.en", device="cpu", compute_type="float16"):
+        # Clean temp dir
+        if self.msdd_temp_path:
+            cleanup(self.msdd_temp_path)
+
+    def initialize_whisper(self, model_name="medium.en", compute_type="float16"):
         # Initialize Whipser on GPU
-        if "cuda:" in device:
-            device_target = device.split(":")
+        if "cuda:" in self.device:
+            device_target = self.device.split(":")
             self.whisper_model = WhisperModel(
                 model_name, device=device_target[0], device_index=int(device_target[1]), compute_type=compute_type
             )
@@ -64,6 +77,26 @@ class DiarizationDeviceThread(threading.Thread):
             self.whisper_model = WhisperModel(
                 model_name, device=device, compute_type=compute_type
             )
+
+    def initialize_nemo(self):
+        # Initialize NeMo on GPU
+        self.msdd_temp_path = os.path.join(os.getcwd(), "temp_outputs_{0}".format(self.proc_id))
+        os.makedirs(self.msdd_temp_path, exist_ok=True)
+        self.msdd_model = NeuralDiarizer(cfg=create_config(self.msdd_temp_path)).to(self.device)
+
+    def initialize_punctuation(self):
+        if "cuda:" in self.device:
+            device_target = self.device.split(":")
+            self.punctuation_model = PunctuationModel(model="kredor/punctuate-all")
+            del self.punctuation_model.pipe
+            self.punctuation_model.pipe = pipeline(
+                "ner",
+                "kredor/punctuate-all",
+                aggregation_strategy="none",
+                device=device_target[1]
+            )
+        else:
+            self.punctuation_model = PunctuationModel(model="kredor/punctuate-all")
 
     def diarize_audio(
             self,
@@ -89,12 +122,6 @@ class DiarizationDeviceThread(threading.Thread):
                 )
         else:
             vocal_target = audio
-
-        logging.info("Starting Nemo process with vocal_target: ", vocal_target)
-        temp_path = os.path.join(os.getcwd(), "temp_outputs_{0}".format(self.proc_id))
-        nemo_process = subprocess.Popen(
-            ["python3", "nemo_process.py", "-a", vocal_target, "--device", device, "--processing-dir", temp_path],
-        )
 
         if self.global_args.suppress_numerals:
             numeral_symbol_tokens = find_numeral_symbol_tokens(self.whisper_model.hf_tokenizer)
@@ -136,11 +163,14 @@ class DiarizationDeviceThread(threading.Thread):
                 for word in segment["words"]:
                     word_timestamps.append({"word": word[2], "start": word[0], "end": word[1]})
 
-        # Reading timestamps <> Speaker Labels mapping
-        nemo_process.communicate()
+        # Speaker Labeling using NeMo
+        # convert audio to mono for NeMo combatibility
+        sound = AudioSegment.from_file(vocal_target).set_channels(1)
+        sound.export(os.path.join(self.msdd_temp_path, "mono_file.wav"), format="wav")
+        self.msdd_model.diarize()
 
         speaker_ts = []
-        with open(os.path.join(temp_path, "pred_rttms", "mono_file.rttm"), "r") as f:
+        with open(os.path.join(self.msdd_temp_path, "pred_rttms", "mono_file.rttm"), "r") as f:
             lines = f.readlines()
             for line in lines:
                 line_list = line.split(" ")
@@ -152,11 +182,8 @@ class DiarizationDeviceThread(threading.Thread):
 
         if info.language in punct_model_langs:
             # restoring punctuation in the transcript to help realign the sentences
-            punct_model = PunctuationModel(model="kredor/punctuate-all")
-
             words_list = list(map(lambda x: x["word"], wsm))
-
-            labled_words = punct_model.predict(words_list)
+            labled_words = self.punctuation_model.predict(words_list)
 
             ending_puncts = ".?!"
             model_puncts = ".,;:!?"
@@ -197,9 +224,6 @@ class DiarizationDeviceThread(threading.Thread):
                 ssm,
                 self.global_args.sample_rate
             )
-
-        # Clean processing data for this iteration
-        cleanup(temp_path)
 
 
 # Initialize parser

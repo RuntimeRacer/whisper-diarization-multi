@@ -33,6 +33,7 @@ So I decided to extend the base repo with the following functionality:
 - Directory-based batch processing: Diarize all files in a specified directory.
 - Multi-GPU processing: Run parallel processes on multiple GPUs if availiable.
 - Multi-Threaded processing: Run multiple processing threads per GPU if VRAM capacity is sufficient.
+- Minimize I/O load and blocking calls
 
 ## Original Readme
 Speaker Diarization pipeline based on OpenAI Whisper
