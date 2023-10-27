@@ -336,7 +336,7 @@ def split_by_vad_and_speaker(base_file, base_dir, output_dir, transcript_data, s
                 "-ar",
                 str(sample_rate),
                 "-threads",
-                1,
+                str(1),
                 str(utt_audio_name)
             ]
             s = subprocess.call(convert_args)
