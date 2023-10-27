@@ -329,7 +329,7 @@ class DiarizationDeviceThread(threading.Thread):
                 wsm = get_realigned_ws_mapping_with_punctuation(wsm)
         else:
             logging.warning(
-                f"Punctuation restoration is not available for {info.language} language."
+                f"Punctuation restoration is not available for {info.language} language and empty utterances."
             )
 
         if self.global_args.nemo:
