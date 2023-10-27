@@ -93,7 +93,7 @@ class DiarizationDeviceThread(threading.Thread):
                 "ner",
                 "kredor/punctuate-all",
                 aggregation_strategy="none",
-                device=device_target[1]
+                device=int(device_target[1])
             )
         else:
             self.punctuation_model = PunctuationModel(model="kredor/punctuate-all")
