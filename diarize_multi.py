@@ -148,24 +148,28 @@ class DiarizationDeviceThread(threading.Thread):
             whisper_results.append(segment._asdict())
 
         if info.language in wav2vec2_langs:
-            # Load alignment model only once to speed up processing
-            if info.language not in self.alignment_models:
-                alignment_model, metadata = whisperx.load_align_model(
-                    language_code=info.language, device=device
-                )
-                self.alignment_models[info.language] = {
-                    "model": alignment_model,
-                    "meta": metadata
-                }
-            else:
-                alignment_model = self.alignment_models[info.language]["model"]
-                metadata = self.alignment_models[info.language]["meta"]
+            try:
+                # Load alignment model only once to speed up processing
+                if info.language not in self.alignment_models:
+                    alignment_model, metadata = whisperx.load_align_model(
+                        language_code=info.language, device=device
+                    )
+                    self.alignment_models[info.language] = {
+                        "model": alignment_model,
+                        "meta": metadata
+                    }
+                else:
+                    alignment_model = self.alignment_models[info.language]["model"]
+                    metadata = self.alignment_models[info.language]["meta"]
 
-            result_aligned = whisperx.align(
-                whisper_results, alignment_model, metadata, vocal_target, device
-            )
-            if len(result_aligned["word_segments"]) > 1:
+                result_aligned = whisperx.align(
+                    whisper_results, alignment_model, metadata, vocal_target, device
+                )
                 word_timestamps = filter_missing_timestamps(result_aligned["word_segments"])
+
+            except IndexError as e:
+                logging.warning("Forced alignment not possible for file {0}. Error: {1} ".format(vocal_target, e))
+                logging.warning("Applying whisper timestamps...")
 
         if len(word_timestamps) == 0:
             for segment in whisper_results:
