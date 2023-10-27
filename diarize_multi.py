@@ -91,8 +91,9 @@ class DiarizationDeviceThread(threading.Thread):
             vocal_target = audio
 
         logging.info("Starting Nemo process with vocal_target: ", vocal_target)
+        temp_path = os.path.join(os.getcwd(), "temp_outputs_{0}".format(self.proc_id))
         nemo_process = subprocess.Popen(
-            ["python3", "nemo_process.py", "-a", vocal_target, "--device", device],
+            ["python3", "nemo_process.py", "-a", vocal_target, "--device", device, "--processing-dir", temp_path],
         )
 
         if self.global_args.suppress_numerals:
@@ -137,8 +138,6 @@ class DiarizationDeviceThread(threading.Thread):
 
         # Reading timestamps <> Speaker Labels mapping
         nemo_process.communicate()
-        ROOT = os.getcwd()
-        temp_path = os.path.join(ROOT, "temp_outputs_{0}".format(self.proc_id))
 
         speaker_ts = []
         with open(os.path.join(temp_path, "pred_rttms", "mono_file.rttm"), "r") as f:
