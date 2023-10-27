@@ -82,6 +82,9 @@ class DiarizationDeviceThread(threading.Thread):
         # Initialize NeMo on GPU
         self.msdd_temp_path = os.path.join(os.getcwd(), "temp_outputs_{0}".format(self.proc_id))
         os.makedirs(self.msdd_temp_path, exist_ok=True)
+        # Ensure no logspam
+        logger = logging.getLogger('nemo.collections.asr.models.msdd_models.NeuralDiarizer')
+        logger.setLevel(logging.ERROR)  # Set log level to 'error'
         self.msdd_model = NeuralDiarizer(cfg=create_config(self.msdd_temp_path)).to(self.device)
 
     def initialize_punctuation(self):
@@ -169,7 +172,12 @@ class DiarizationDeviceThread(threading.Thread):
         # convert audio to mono for NeMo combatibility
         sound = AudioSegment.from_file(vocal_target).set_channels(1)
         sound.export(os.path.join(self.msdd_temp_path, "mono_file.wav"), format="wav")
-        self.msdd_model.diarize()
+        try:
+            self.msdd_model.diarize()
+        except ValueError as e:
+            logging.warning("File {0} could not be processed, likely no speech data. Error: {1} ".format(vocal_target, e))
+            logging.warning("skipping...")
+
 
         speaker_ts = []
         with open(os.path.join(self.msdd_temp_path, "pred_rttms", "mono_file.rttm"), "r") as f:
