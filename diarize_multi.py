@@ -182,7 +182,7 @@ class DiarizationDeviceThread(threading.Thread):
         sound.export(os.path.join(self.msdd_temp_path, "mono_file.wav"), format="wav")
         try:
             self.msdd_model.diarize()
-        except (ValueError, IndexError) as e:
+        except (ValueError, IndexError, KeyError) as e:
             logging.warning("File {0} could not be processed, likely no speech data. Error: {1} ".format(vocal_target, e))
             logging.warning("skipping...")
             return
