@@ -136,6 +136,7 @@ class DiarizationDeviceThread(threading.Thread):
             vad_filter=True,
         )
         whisper_results = []
+        word_timestamps = []
         for segment in segments:
             whisper_results.append(segment._asdict())
 
@@ -156,9 +157,10 @@ class DiarizationDeviceThread(threading.Thread):
             result_aligned = whisperx.align(
                 whisper_results, alignment_model, metadata, vocal_target, device
             )
-            word_timestamps = filter_missing_timestamps(result_aligned["word_segments"])
-        else:
-            word_timestamps = []
+            if len(result_aligned["word_segments"]) > 0:
+                word_timestamps = filter_missing_timestamps(result_aligned["word_segments"])
+
+        if len(word_timestamps) == 0:
             for segment in whisper_results:
                 for word in segment["words"]:
                     word_timestamps.append({"word": word[2], "start": word[0], "end": word[1]})

@@ -294,7 +294,7 @@ def write_srt(transcript, file):
 def split_by_vad_and_speaker(base_file, base_dir, output_dir, transcript_data, sample_rate):
     # get base file name
     base_name = os.path.splitext(base_file)[0]
-    base_name.replace(base_dir, output_dir)
+    base_name = base_name.replace(base_dir, output_dir)
 
     # Group all Segments by speaker
     speakers = {}
