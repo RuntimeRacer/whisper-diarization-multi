@@ -203,7 +203,7 @@ parser.add_argument(
 )
 
 parser.add_argument(
-    "p", "--pattern",
+    "-p", "--pattern",
     dest="pattern",
     default="*.mp3",
     help="pattern of the audio files to search for",
