@@ -83,7 +83,7 @@ class DiarizationDeviceThread(threading.Thread):
         self.msdd_temp_path = os.path.join(os.getcwd(), "temp_outputs_{0}".format(self.proc_id))
         os.makedirs(self.msdd_temp_path, exist_ok=True)
         # Ensure no logspam
-        logger = logging.getLogger('nemo.collections.asr.models.msdd_models.NeuralDiarizer')
+        logger = logging.getLogger('nemo_logger')
         logger.setLevel(logging.ERROR)  # Set log level to 'error'
         self.msdd_model = NeuralDiarizer(cfg=create_config(self.msdd_temp_path)).to(self.device)
 
@@ -305,6 +305,7 @@ parser.add_argument(
 parser.add_argument(
     "-t", "--threads",
     dest="threads",
+    type=int,
     default=1,
     help="number of threads to use per device",
 )
