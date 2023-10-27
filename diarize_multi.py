@@ -42,7 +42,7 @@ class DiarizationDeviceThread(threading.Thread):
         # Initialize Whisper
         self.initialize_whisper(
             model_name=self.global_args.model_name,
-            device=self.global_args.device,
+            device=self.device,
             compute_type=self.global_args.compute_type
         )
         # Create a progress bar for this thread
