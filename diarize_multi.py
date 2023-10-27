@@ -55,9 +55,15 @@ class DiarizationDeviceThread(threading.Thread):
 
     def initialize_whisper(self, model_name="medium.en", device="cpu", compute_type="float16"):
         # Initialize Whipser on GPU
-        self.whisper_model = WhisperModel(
-            model_name, device=device, compute_type=compute_type
-        )
+        if "cuda:" in device:
+            device_target = device.split(":")
+            self.whisper_model = WhisperModel(
+                model_name, device=device_target[0], device_index=int(device_target[1]), compute_type=compute_type
+            )
+        else:
+            self.whisper_model = WhisperModel(
+                model_name, device=device, compute_type=compute_type
+            )
 
     def diarize_audio(
             self,
