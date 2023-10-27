@@ -60,6 +60,10 @@ class DiarizationDeviceThread(threading.Thread):
         for audio in self.files:
             self.diarize_audio(audio)
             progress_bar.update(1)
+            # Clear cache after each run
+            torch.cuda.empty_cache()
+
+        # Finalize Progress bar
         progress_bar.close()
 
         # Clean temp dir
@@ -160,7 +164,7 @@ class DiarizationDeviceThread(threading.Thread):
             result_aligned = whisperx.align(
                 whisper_results, alignment_model, metadata, vocal_target, device
             )
-            if len(result_aligned["word_segments"]) > 0:
+            if len(result_aligned["word_segments"]) > 1:
                 word_timestamps = filter_missing_timestamps(result_aligned["word_segments"])
 
         if len(word_timestamps) == 0:
