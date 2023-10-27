@@ -1,9 +1,11 @@
 import os
 import wget
+from pathlib import Path
 from omegaconf import OmegaConf
 import json
 import shutil
 import nltk
+import subprocess
 from whisperx.alignment import DEFAULT_ALIGN_MODELS_HF, DEFAULT_ALIGN_MODELS_TORCH
 
 punct_model_langs = [
@@ -287,6 +289,54 @@ def write_srt(transcript, file):
             file=file,
             flush=True,
         )
+
+
+def split_by_vad_and_speaker(base_file, base_dir, output_dir, transcript_data, sample_rate):
+    # get base file name
+    base_name = os.path.splitext(base_file)[0]
+
+    # Group all Segments by speaker
+    speakers = {}
+    for _, segment in enumerate(transcript_data):
+        if segment['speaker'] not in speakers:
+            speakers[segment['speaker']] = []
+        speakers[segment['speaker']].append(segment)
+
+    # For each speaker, create splitted output audio and transcripts
+    for spk_idx, spk_key in enumerate(speakers.keys()):
+        speaker_utterances = speakers[spk_key]
+        for utt_idx, utt_segment in enumerate(speaker_utterances):
+            utt_audio_name = "{0}_{1}_{2}.flac".format(base_name, spk_idx, utt_idx)
+            utt_transcript_name = "{0}_{1}_{2}.txt".format(base_name, spk_idx, utt_idx)
+
+            # Create utterance file if it doesen't exist
+            dest_utterance_path = Path(utt_transcript_name)
+            if not dest_utterance_path.is_file():
+                with open(dest_utterance_path, "w", encoding="utf-8-sig") as out:
+                    out.write(utt_segment["text"].strip())
+
+            # if the file already exists, skip conversion
+            dest_audio_path = Path(utt_audio_name)
+            if dest_audio_path.is_file():
+                continue
+
+            # Process using FFMPEG
+            convert_args = [
+                "/usr/bin/ffmpeg",
+                "-y",
+                "-loglevel",
+                "fatal",
+                "-i",
+                str(base_file),
+                "-ss",
+                format_timestamp(utt_segment['start_time'], always_include_hours=True),
+                "-t",
+                format_timestamp(utt_segment['end_time'], always_include_hours=True),
+                "-ar",
+                str(sample_rate),
+                str(utt_audio_name)
+            ]
+            s = subprocess.call(convert_args)
 
 
 def find_numeral_symbol_tokens(tokenizer):

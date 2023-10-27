@@ -21,9 +21,20 @@
   </a>
  
 </p>
+<h3 align="center">- Optimized for batch processing - </h3>
 
+## Speaker Diarization Multiprocessing Fork
+I created this fork because I needed to Diarize and label large datasets for LLM-Training.
+Unfortunately, the base repo, and also an existing batch processing fork do not support directory-based processing, and
+the other batch processing fork is largely outdated, too.
 
-# 
+So I decided to extend the base repo with the following functionality:
+
+- Directory-based batch processing: Diarize all files in a specified directory.
+- Multi-GPU processing: Run parallel processes on multiple GPUs if availiable.
+- Multi-Threaded processing: Run multiple processing threads per GPU if VRAM capacity is sufficient.
+
+## Original Readme
 Speaker Diarization pipeline based on OpenAI Whisper
 I'd like to thank [@m-bain](https://github.com/m-bain) for Wav2Vec2 forced alignment, [@mu4farooqi](https://github.com/mu4farooqi) for punctuation realignment algorithm
 
