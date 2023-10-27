@@ -190,7 +190,13 @@ class DiarizationDeviceThread(threading.Thread):
             with open(f"{os.path.splitext(audio)[0]}.srt", "w", encoding="utf-8-sig") as srt:
                 write_srt(ssm, srt)
         else:
-            split_by_vad_and_speaker(audio, self.global_args.output_dir, ssm, self.global_args.sample_rate)
+            split_by_vad_and_speaker(
+                audio,
+                self.global_args.audio_dir,
+                self.global_args.output_dir,
+                ssm,
+                self.global_args.sample_rate
+            )
 
         # Clean processing data for this iteration
         cleanup(temp_path)
