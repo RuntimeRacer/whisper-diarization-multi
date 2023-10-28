@@ -286,7 +286,7 @@ class DiarizationDeviceThread(threading.Thread):
         if len(word_timestamps) == 0:
             for segment in whisper_results:
                 for word in segment["words"]:
-                    word_timestamps.append({"word": word[2], "start": word[0], "end": word[1]})
+                    word_timestamps.append({"word": word[2].strip(), "start": word[0], "end": word[1]})
 
         if self.global_args.nemo:
             # Speaker Labeling using NeMo

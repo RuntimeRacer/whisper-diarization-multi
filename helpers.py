@@ -277,10 +277,7 @@ def get_sentences(word_mapping):
             }
         else:
             snt["end_time"] = e
-        # Append word, plus space if text not empty
-        if len(snt["text"]) > 0:
-            snt["text"] += " "
-        snt["text"] += wrd
+        snt["text"] += wrd + " "
 
     if snt:
         snts.append(snt)
