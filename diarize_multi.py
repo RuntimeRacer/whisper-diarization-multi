@@ -122,7 +122,7 @@ parser.add_argument(
     "-sr", "--sample-rate",
     dest="sample_rate",
     default=24000,
-    help="Target sample rate for splitted output files (if split enabled)",
+    help="Target sample rate for splitted output files (if split enabled). set to -1 to disable conversion.",
 )
 
 args = parser.parse_args()
