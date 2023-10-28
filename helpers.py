@@ -359,7 +359,7 @@ def split_by_vad_and_speaker(base_file, base_dir, output_dir, transcript_data, s
 
             # Create utterance file if it doesen't exist
             dest_utterance_path = Path(utt_transcript_name)
-            os.makedirs(dest_utterance_path, exist_ok=True)
+            os.makedirs(os.path.dirname(dest_utterance_path), exist_ok=True)
             if not dest_utterance_path.is_file():
                 with open(dest_utterance_path, "w", encoding="utf-8-sig") as out:
                     out.write(utt_segment["text"].strip())
@@ -402,7 +402,7 @@ def save_transcript(base_file, base_dir, output_dir, sentences, sample_rate):
 
         # Create utterance file if it doesen't exist
         dest_utterance_path = Path(snt_transcript_name)
-        os.makedirs(dest_utterance_path, exist_ok=True)
+        os.makedirs(os.path.dirname(dest_utterance_path), exist_ok=True)
         if not dest_utterance_path.is_file():
             with open(dest_utterance_path, "w", encoding="utf-8-sig") as out:
                 out.write(sentence_segment["text"].strip())
