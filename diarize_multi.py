@@ -36,14 +36,14 @@ parser.add_argument(
     help="pattern of the audio files to search for",
 )
 
-parser.add_argument(
-    "-sd", "--include-subdirs",
-    action="store_true",
-    dest="include_subdirs",
-    default=False,
-    help="Suppresses Numerical Digits."
-    "This helps the diarization accuracy but converts all digits into written text.",
-)
+# parser.add_argument(
+#     "-sd", "--include-subdirs",
+#     action="store_true",
+#     dest="include_subdirs",
+#     default=False,
+#     help="Recursively include sub-directories"
+#     "Include directories below the audio-dir for searching files for transcribe.",
+# )
 
 parser.add_argument(
     "--no-stem",
@@ -99,7 +99,7 @@ parser.add_argument(
     "-ct", "--compute-type",
     dest="compute_type",
     default="float16" if torch.cuda.is_available() else "int8",
-    help="number of threads to use per device",
+    help="data type to use for loading the models",
 )
 
 parser.add_argument(
