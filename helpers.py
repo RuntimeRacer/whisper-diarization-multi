@@ -381,14 +381,14 @@ def split_by_vad_and_speaker(base_file, base_dir, output_dir, transcript_data, s
                     "-ss",
                     format_timestamp(utt_segment['start_time'], always_include_hours=True),
                     "-to",
-                    format_timestamp(utt_segment['end_time']+500, always_include_hours=True),
+                    format_timestamp(utt_segment['end_time'], always_include_hours=True),
                     "-ar",
                     str(sample_rate),
                     "-threads",
                     str(1),
                     str(utt_audio_name)
                 ]
-                s = subprocess.call(convert_args)
+                subprocess.Popen(convert_args)
 
 
 def save_transcript(base_file, base_dir, output_dir, sentences, sample_rate):
@@ -424,14 +424,14 @@ def save_transcript(base_file, base_dir, output_dir, sentences, sample_rate):
                 "-ss",
                 format_timestamp(sentence_segment['start_time'], always_include_hours=True),
                 "-to",
-                format_timestamp(sentence_segment['end_time']+500, always_include_hours=True),
+                format_timestamp(sentence_segment['end_time'], always_include_hours=True),
                 "-ar",
                 str(sample_rate),
                 "-threads",
                 str(1),
                 str(snt_audio_name)
             ]
-            s = subprocess.call(convert_args)
+            subprocess.Popen(convert_args)
 
 
 def find_numeral_symbol_tokens(tokenizer):
