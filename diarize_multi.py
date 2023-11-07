@@ -191,7 +191,7 @@ class DiarizationDeviceThread(threading.Thread):
             )
         else:
             self.whisper_model = WhisperModel(
-                model_name, device=device, compute_type=compute_type
+                model_name, device=self.device, compute_type=compute_type
             )
 
     def initialize_nemo(self):
@@ -363,7 +363,7 @@ class DiarizationDeviceThread(threading.Thread):
                     self.global_args.sample_rate
                 )
         else:
-            save_transcript(
+            save_transcript_async(
                 audio,
                 self.global_args.audio_dir,
                 self.global_args.output_dir,
