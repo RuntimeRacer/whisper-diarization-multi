@@ -178,7 +178,7 @@ class FileUploaderManagerThread(threading.Thread):
 
                 # Build MQ Message
                 message = {
-                    "MessageID": uuid.uuid4(),
+                    "MessageID": str(uuid.uuid4()),
                     "MessageMetadata": {
                         "filename": os.path.basename(next_file)
                     },

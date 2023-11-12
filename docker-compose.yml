@@ -10,7 +10,7 @@ services:
         - "5672:5672"
         - "15672:15672"
     volumes:
-        - ~/rabbitmq/conf/rabbitmq.config:/etc/rabbitmq/rabbitmq.config
+        - ~/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf
         - ~/rabbitmq/pki/:/etc/pki/
         - ~/rabbitmq/data/:/var/lib/rabbitmq/
         - ~/rabbitmq/log/:/var/log/rabbitmq/

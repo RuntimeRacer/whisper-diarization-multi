@@ -311,8 +311,8 @@ if __name__ == "__main__":
     parser.add_argument("-p", "--rabbitmq_pass", type=str, help="password to establish broker connection")
     parser.add_argument("-rh", "--rabbitmq_host", type=str, help="host of the rabbitmq server")
     parser.add_argument("-rp", "--rabbitmq_port", type=int, default=5672, help="port of the rabbitmq server")
-    parser.add_argument("-pl", "--poll_channel", type=str, help="name if the rabbitmq channel to subscribe to")
-    parser.add_argument("-pu", "--push_channel", type=str, help="name if the rabbitmq channel to push results to")
+    parser.add_argument("-pl", "--poll_channel", type=str, default="diarize_tasks", help="name if the rabbitmq channel to subscribe to")
+    parser.add_argument("-pu", "--push_channel", type=str, default="diarize_results", help="name if the rabbitmq channel to push results to")
 
     # Worker Parameters
     parser.add_argument("-pd", "--processing_dir", type=str, default='/tmp/', help="path to the processing directory to store temporary files")
