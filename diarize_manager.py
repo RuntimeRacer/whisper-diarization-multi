@@ -302,7 +302,7 @@ class DiarizationProcessingThread(threading.Thread):
 
             # Start listening
             try:
-                self.polling_channel_ref.basic_consume(queue=self.global_args.result_channel, on_message_callback=self.handle_result_message)
+                self.polling_channel_ref.basic_consume(queue=self.global_args.result_channel, on_message_callback=self.handle_result_message, auto_ack=True)
                 logging.info("DiarizationProcessingThread-{0}: Listening for messages on queue {1}...".format(self.thread_id, self.global_args.result_channel))
                 self.polling_channel_ref.start_consuming()
             except Exception as e:
@@ -332,12 +332,12 @@ class DiarizationProcessingThread(threading.Thread):
         # Only process valid data
         if len(message_id) == 0:
             logging.warning("DiarizationProcessingThread-{0}: Message received was invalid. Skipping...".format(self.thread_id))
-            channel.basic_ack(delivery_tag=method.delivery_tag)
+            # channel.basic_ack(delivery_tag=method.delivery_tag)
             return
         elif len(message_body) == 0:
             logging.warning("DiarizationProcessingThread-{0}: Message body received was empty. Assuming no valid speech in audio...".format(self.thread_id))
             self.upload_worker.mark_task_complete(message_id)
-            channel.basic_ack(delivery_tag=method.delivery_tag)
+            # channel.basic_ack(delivery_tag=method.delivery_tag)
             return
 
         logging.debug("DiarizationProcessingThread-{0}: Received result for task message with ID '{1}'".format(self.thread_id, message_id))
@@ -351,7 +351,7 @@ class DiarizationProcessingThread(threading.Thread):
         # Mark task as done in upload worker
         self.upload_worker.mark_task_complete(message_id)
         # Send ACK to result channel
-        channel.basic_ack(delivery_tag=method.delivery_tag)
+        # channel.basic_ack(delivery_tag=method.delivery_tag)
 
     def split_transcribed_file(
             self,
