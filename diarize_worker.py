@@ -185,7 +185,7 @@ class DiarizeWorker:
                 continue
             # Save the file into the temporary folder
             os.makedirs(self.processing_dir, exist_ok=True)
-            file_path = Path(self.processing_dir).joinpath(metadata['filename'])
+            file_path = str(Path(self.processing_dir).joinpath(metadata['filename']))
             logging.debug("Writing temp file to: {0}".format(file_path))
             with open(file_path, "wb") as file:
                 binary_content = base64.decodebytes(base64_data)
