@@ -143,7 +143,7 @@ class DiarizeWorker:
 
     def handle_prompt_message(self, channel, method, properties, body):
         # Parse message
-        logging.info("Received message from channel '{}': {}".format(self.poll_channel, body))
+        logging.info("Received message from channel '{}'".format(self.poll_channel, body))
         data = json.loads(body)
         message_id = data['MessageID'] if 'MessageID' in data else ''
         message_body = data['MessageBody'] if 'MessageBody' in data else ''
@@ -186,6 +186,7 @@ class DiarizeWorker:
             # Save the file into the temporary folder
             os.makedirs(self.processing_dir, exist_ok=True)
             file_path = Path(self.processing_dir).joinpath(metadata['filename'])
+            logging.debug("Writing temp file to: {0}".format(file_path))
             with open(file_path, "wb") as file:
                 binary_content = base64.decodebytes(base64_data)
                 file.write(binary_content)
