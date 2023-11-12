@@ -91,8 +91,8 @@ class DiarizeWorker:
                 logging.info("Polling Worker: Successfully connected to RabbitMQ host")
             except RuntimeError as e:
                 self.connection_active = False
-                logging.error("Unable to connect to RabbitMQ host: {}".format(str(e)))
-                logging.error("Retrying in 10 seconds...")
+                logging.error("Polling Worker: Unable to connect to RabbitMQ host: {}".format(str(e)))
+                logging.error("Polling Worker: Retrying in 10 seconds...")
                 time.sleep(10)
                 continue
 

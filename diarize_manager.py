@@ -96,19 +96,27 @@ parser.add_argument(
 # )
 
 parser.add_argument(
-    "-ft", "--file-threads",
-    dest="file_threads",
+    "-t", "--threads",
+    dest="threads",
     type=int,
-    default=20,
-    help="number of file processing threads",
+    default=8,
+    help="number of transcription result processing threads",
 )
 
 parser.add_argument(
-    "-rt", "--result-threads",
-    dest="result_threads",
+    "-qs", "--queue_size",
+    dest="queue_size",
     type=int,
-    default=8,
-    help="number of result processing threads",
+    default=100,
+    help="max files to be uploaded to the RabbitMQ Queue",
+)
+
+parser.add_argument(
+    "-qt", "--queue_timeout",
+    dest="queue_timeout",
+    type=int,
+    default=21600,
+    help="max time in seconds for a file to stay pending in queue before being removed",
 )
 
 # parser.add_argument(
@@ -152,6 +160,7 @@ class FileUploaderManagerThread(threading.Thread):
         self.files_in_queue = {}
         self.pushing_connection = None
         self.pushing_channel_ref = None
+
     def run(self):
         self.active = True
         start_time = time.time()
@@ -204,7 +213,7 @@ class FileUploaderManagerThread(threading.Thread):
                             logging.warning("Exception after sending task: {0}".format(str(e)))
 
                 # Mark file as pending
-                self.files_in_queue[next_file] = {
+                self.files_in_queue[message['MessageID']] = {
                     "path": next_file,
                     "submit_time": time.time()
                 }
@@ -214,16 +223,17 @@ class FileUploaderManagerThread(threading.Thread):
 
             # Check for timeouts among files in queue
             files_to_reset = []
-            for file_status in self.files_in_queue.values():
+            for message_id, file_status in self.files_in_queue.items():
                 current_time = time.time()
                 submit_time = file_status['submit_time']
                 seconds_elapsed = current_time - submit_time
                 if seconds_elapsed > self.processing_timeout:
-                    files_to_reset.append(file_status['path'])
+                    files_to_reset.append(message_id)
 
             # Remove files in timeout from queue and append them back to the pending list
-            for _, filepath in files_to_reset:
-                del self.files_in_queue[filepath]
+            for _, message_id in files_to_reset:
+                filepath = self.files_in_queue[message_id]['path']
+                del self.files_in_queue[message_id]
                 self.pending_files.append(filepath)
                 logging.info("Removed file {0} from in-progress-queue due to {1} seconds of inactivity.".format(filepath, self.processing_timeout))
 
@@ -246,35 +256,97 @@ class FileUploaderManagerThread(threading.Thread):
         logging.info("All files have been processed successfully")
         self.active = False
 
+    def get_task_metadata(self, message_id):
+        return self.files_in_queue[message_id]
+
+    def mark_task_complete(self, message_id):
+        del self.files_in_queue[message_id]
+
 
 class DiarizationProcessingThread(threading.Thread):
 
     def __init__(
             self,
             thread_id,
-            result_executor,
-            files,
+            upload_worker,
             global_args
     ):
         # execute the base constructor
         threading.Thread.__init__(self)
-        # store params
-        self.files = files
-        self.result_executor = result_executor
         # Init the worker
         self.thread_id = thread_id
+        self.upload_worker = upload_worker
         self.active = False
         self.global_args = global_args
 
+        # Message Handling params
+        self.connection_active = False
+        self.polling_connection = None
+        self.polling_channel_ref = None
+
     def run(self) -> None:
         self.active = True
-        # Process audio one by one in this thread
-        for audio in self.files:
-            self.remote_diarize_audio(audio)
-        logging.info('Thread ID {0} successfully scheduled all {1} files for processing.',format(self.thread_id))
+        while self.active:
+            # Connect to RabbitMQ
+            if not self.connection_active:
+                try:
+                    logging.info("DiarizationProcessingThread: Establishing connection...")
+                    self.polling_connection = pika.BlockingConnection(pika.ConnectionParameters(
+                        host=self.global_args.rabbitmq_host,
+                        port=self.global_args.rabbitmq_port,
+                        credentials=pika.credentials.PlainCredentials(username=self.global_args.rabbitmq_user, password=self.global_args.rabbitmq_pass),
+                        heartbeat=30
+                    ))
+                    self.polling_channel_ref = self.polling_connection.channel()
+                    self.polling_channel_ref.queue_declare(queue=self.global_args.result_channel, durable=True)
+                    self.connection_active = True
+                    logging.info("DiarizationProcessingThread: Successfully connected to RabbitMQ host")
+                except RuntimeError as e:
+                    self.connection_active = False
+                    logging.error("DiarizationProcessingThread: Unable to connect to RabbitMQ host: {}".format(str(e)))
+                    logging.error("DiarizationProcessingThread: Retrying in 10 seconds...")
+                    time.sleep(10)
+                    continue
 
-    def remote_diarize_audio(self, audio):
+            # Start listening
+            try:
+                self.polling_channel_ref.basic_consume(queue=self.global_args.result_channel, on_message_callback=self.handle_result_message, auto_ack=True)
+                logging.info("Listening for messages on queue {}...".format(self.global_args.result_channel))
+                self.polling_channel_ref.start_consuming()
+            except Exception as e:
+                logging.error("Lost connection to RabbitMQ host: {}".format(str(e)))
+                self.connection_active = False
 
+        logging.info("DiarizationProcessingThread-{0} finished execution".format(self.thread_id))
+
+    def shutdown(self):
+        self.active = False
+        self.polling_channel_ref.close()
+        self.polling_connection.close()
+        self.connection_active = False
+
+    def handle_result_message(self, channel, method, properties, body):
+        # Parse message
+        logging.info("Received message from channel '{}': {}".format(self.global_args.result_channel, body))
+        data = json.loads(body)
+        message_id = data['MessageID'] if 'MessageID' in data else ''
+        message_body = data['MessageBody'] if 'MessageBody' in data else ''
+        message_metadata = data['MessageMetadata'] if 'MessageMetadata' in data else ''
+
+        # Only process valid data
+        if len(message_id) == 0 or len(message_body) == 0:
+            logging.warning("Message received was invalid. Skipping...")
+            return
+
+        logging.debug("Recieved result for task message with ID {}".format(message_id))
+        # Get Metadata and Mark as done in upload worker
+        metadata = self.upload_worker.get_task_metadata(message_id)
+        self.upload_worker.mark_task_complete(message_id)
+        # Get Path from Metadata
+        filepath = metadata['path']
+
+        # Start Splitting the Audio based on result data
+        self.split_transcribed_file(filepath, message_body)
 
     def split_transcribed_file(
             self,
@@ -307,31 +379,39 @@ for path, _, files in os.walk(args.audio_dir):
 thread_list = []
 total_threads = args.threads
 files_total = len(file_list)
-files_per_thread = files_total // total_threads
-remainder = files_total % total_threads
+logging.info("Detected {0} files to be diarized".format(files_total))
 
-result_processing_pool = ThreadPoolExecutor(max_workers=args.result_threads)
+# Build Upload Worker
+upload_worker = FileUploaderManagerThread(
+    pending_files=file_list,
+    global_args=args,
+    max_queue_size=args.queue_size,
+    processing_timeout=args.queue_timeout
+)
 
+# Build Result Processing Threads
 for t_id in range(0, args.threads):
-    # Get the subset of files for the thread
-    start_idx = (args.threads + t_id) * files_per_thread
-    end_idx = start_idx + files_per_thread
-    if t_id < remainder:
-        end_idx += 1
-    files_subset = file_list[start_idx:end_idx]
-
     # Init the thread
     processing_thread = DiarizationProcessingThread(
         thread_id=t_id,
-        files=files_subset,
-        result_executor=result_processing_pool,
-        global_args=args
+        global_args=args,
+        upload_worker=upload_worker
     )
     thread_list.append(processing_thread)
 
-# Star processing for all threads
+# Start Upload Worker
+upload_worker.start()
+
+# Start result threads
 for thread in thread_list:
     thread.start()
+
+# Wait for upload worker to finish (happens once last file in queue has been processed)
+upload_worker.join()
+
+# Shutdown all processing thread connections
+for thread in thread_list:
+    thread.shutdown()
 
 # Wait for all threads to finish
 for thread in thread_list:
