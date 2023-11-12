@@ -341,14 +341,15 @@ class DiarizationProcessingThread(threading.Thread):
             return
 
         logging.debug("DiarizationProcessingThread-{}: Received result for task message with ID '{}'".format(self.thread_id, message_id))
-        # Get Metadata and Mark as done in upload worker
+        # Get Metadata
         metadata = self.upload_worker.get_task_metadata(message_id)
-        self.upload_worker.mark_task_complete(message_id)
         # Get Path from Metadata
         filepath = metadata['path']
 
         # Start Splitting the Audio based on result data
         self.split_transcribed_file(filepath, message_body)
+        # Mark task as done in upload worker
+        self.upload_worker.mark_task_complete(message_id)
         # Send ACK to result channel
         channel.basic_ack(delivery_tag=method.delivery_tag)
 
