@@ -344,7 +344,7 @@ class DiarizationProcessingThread(threading.Thread):
         # Start Splitting the Audio based on result data
         self.split_transcribed_file(filepath, message_body)
         # Send ACK to result channel
-        channel.basic_ack()
+        channel.basic_ack(delivery_tag=method.delivery_tag)
 
     def split_transcribed_file(
             self,

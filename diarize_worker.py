@@ -166,7 +166,7 @@ class DiarizeWorker:
         })
         logging.debug("Added message with ID '{}' to cache".format(message_id))
         # Send ACK to tasks channel
-        channel.basic_ack()
+        channel.basic_ack(delivery_tag=method.delivery_tag)
 
         # Check for Cache capacity and block if reached
         if len(self.cached_messages) > self.cache_size:
