@@ -227,15 +227,16 @@ class FileUploaderManagerThread(threading.Thread):
                 logging.info("Removed file {0} from in-progress-queue due to {1} seconds of inactivity.".format(filepath, self.processing_timeout))
 
             # Print status info
+            queued = len(self.files_in_queue)
             pending = len(self.pending_files)
             hours, rem = divmod(time.time() - start_time, 3600)
             minutes, seconds = divmod(rem, 60)
             logging.info("--------------------------------------------------------------------------------------------------")
             logging.info("Currently {0} files in queue; {1} pending files of {2} files total. {3}% done - Time elapsed: {4}.".format(
-                len(self.files_in_queue),
+                queued,
                 pending,
                 self.total_files_count,
-                round((1-(pending/self.total_files_count))*100, 2),
+                round((1-(pending+queued/self.total_files_count))*100, 2),
                 "{:0>2}:{:0>2}:{:05.2f}".format(int(hours), int(minutes), seconds)
             ))
             logging.info("--------------------------------------------------------------------------------------------------")
@@ -301,7 +302,7 @@ class DiarizationProcessingThread(threading.Thread):
 
             # Start listening
             try:
-                self.polling_channel_ref.basic_consume(queue=self.global_args.result_channel, on_message_callback=self.handle_result_message, auto_ack=True)
+                self.polling_channel_ref.basic_consume(queue=self.global_args.result_channel, on_message_callback=self.handle_result_message)
                 logging.info("DiarizationProcessingThread-{}: Listening for messages on queue {}...".format(self.thread_id, self.global_args.result_channel))
                 self.polling_channel_ref.start_consuming()
             except Exception as e:
@@ -342,6 +343,8 @@ class DiarizationProcessingThread(threading.Thread):
 
         # Start Splitting the Audio based on result data
         self.split_transcribed_file(filepath, message_body)
+        # Send ACK to result channel
+        channel.basic_ack()
 
     def split_transcribed_file(
             self,

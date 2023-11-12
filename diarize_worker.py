@@ -102,7 +102,7 @@ class DiarizeWorker:
 
             # Start listening
             try:
-                self.polling_channel_ref.basic_consume(queue=self.poll_channel, on_message_callback=self.handle_prompt_message, auto_ack=True)
+                self.polling_channel_ref.basic_consume(queue=self.poll_channel, on_message_callback=self.handle_prompt_message)
                 logging.info("Listening for messages on queue {}...".format(self.poll_channel))
                 self.polling_channel_ref.start_consuming()
             except Exception as e:
@@ -165,6 +165,8 @@ class DiarizeWorker:
             'MessageMetadata': message_metadata
         })
         logging.debug("Added message with ID '{}' to cache".format(message_id))
+        # Send ACK to tasks channel
+        channel.basic_ack()
 
         # Check for Cache capacity and block if reached
         if len(self.cached_messages) > self.cache_size:
