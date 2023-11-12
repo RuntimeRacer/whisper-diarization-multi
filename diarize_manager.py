@@ -325,8 +325,12 @@ class DiarizationProcessingThread(threading.Thread):
         message_metadata = data['MessageMetadata'] if 'MessageMetadata' in data else ''
 
         # Only process valid data
-        if len(message_id) == 0 or len(message_body) == 0:
+        if len(message_id) == 0:
             logging.warning("DiarizationProcessingThread-{}: Message received was invalid. Skipping...".format(self.thread_id))
+            return
+        elif len(message_body) == 0:
+            logging.warning("DiarizationProcessingThread-{}: Message body received was empty. Assuming no valid speech in audio...".format(self.thread_id))
+            self.upload_worker.mark_task_complete(message_id)
             return
 
         logging.debug("DiarizationProcessingThread-{}: Received result for task message with ID '{}'".format(self.thread_id, message_id))
