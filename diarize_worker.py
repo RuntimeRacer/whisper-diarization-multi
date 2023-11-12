@@ -63,6 +63,7 @@ class DiarizeWorker:
         self.whisper_model = None
 
         # Message Handling params
+        self.connection_active = False
         self.cache_thread = None
         self.cache_size = cache_size
         self.cached_messages = []
@@ -75,35 +76,42 @@ class DiarizeWorker:
         # Initialize Whisper
         self.initialize_whisper(model_name=self.model_name)
         # Connect to RabbitMQ
-        try:
-            self.polling_connection = pika.BlockingConnection(pika.ConnectionParameters(
-                host=self.rabbitmq_host,
-                port=self.rabbitmq_port,
-                credentials=pika.credentials.PlainCredentials(username=self.rabbitmq_user, password=self.rabbitmq_pass),
-                heartbeat=30
-            ))
-            self.polling_channel_ref = self.polling_connection.channel()
-            self.polling_channel_ref.queue_declare(queue=self.poll_channel, durable=True)
-        except RuntimeError as e:
-            logging.error("Unable to connect to RabbitMQ host: {}".format(str(e)))
-            raise e
+        while not self.connection_active:
+            try:
+                logging.info("Polling Worker: Establishing connection...")
+                self.polling_connection = pika.BlockingConnection(pika.ConnectionParameters(
+                    host=self.rabbitmq_host,
+                    port=self.rabbitmq_port,
+                    credentials=pika.credentials.PlainCredentials(username=self.rabbitmq_user, password=self.rabbitmq_pass),
+                    heartbeat=30
+                ))
+                self.polling_channel_ref = self.polling_connection.channel()
+                self.polling_channel_ref.queue_declare(queue=self.poll_channel, durable=True)
+                self.connection_active = True
+                logging.info("Polling Worker: Successfully connected to RabbitMQ host")
+            except RuntimeError as e:
+                self.connection_active = False
+                logging.error("Unable to connect to RabbitMQ host: {}".format(str(e)))
+                logging.error("Retrying in 10 seconds...")
+                time.sleep(10)
+                continue
 
-        # Add cache processing thread and start it
-        self.cache_thread = CacheProcessingThread(worker=self)
-        self.cache_thread.start()
+            # Add cache processing thread and start it
+            self.cache_thread = CacheProcessingThread(worker=self)
+            self.cache_thread.start()
 
-        # Start listening
-        try:
-            self.polling_channel_ref.basic_consume(queue=self.poll_channel,
-                                                   on_message_callback=self.handle_prompt_message, auto_ack=True)
-            logging.info("Listening for messages on queue {}...".format(self.poll_channel))
-            self.polling_channel_ref.start_consuming()
-        except Exception as e:
-            logging.error("Lost connection to RabbitMQ host: {}".format(str(e)))
-            # Shutdown cache processing thread
-            self.cache_thread.active = False
-            self.cache_thread.join()
-            raise e
+            # Start listening
+            try:
+                self.polling_channel_ref.basic_consume(queue=self.poll_channel, on_message_callback=self.handle_prompt_message, auto_ack=True)
+                logging.info("Listening for messages on queue {}...".format(self.poll_channel))
+                self.polling_channel_ref.start_consuming()
+            except Exception as e:
+                logging.error("Lost connection to RabbitMQ host: {}".format(str(e)))
+                self.connection_active = False
+                logging.error("Waiting for processing thread to finish...")
+                # Shutdown cache processing thread
+                self.cache_thread.active = False
+                self.cache_thread.join()
 
     def initialize_whisper(self, model_name="medium.en", compute_type="float16"):
         # Initialize Whipser on GPU
@@ -169,14 +177,17 @@ class DiarizeWorker:
             # Get first message from cache
             message = self.cached_messages[0]
             # Decode Message Body from Base64 to binary
-            binary_content = base64.b64decode(message['MessageBody'])
+            base64_data = message['MessageBody'].encode('utf-8')
             # Get filename from metadata
-            metadata = message['MessageBody']
+            metadata = message['MessageMetadata']
             if 'filename' not in metadata:
                 logging.error("message does not contain filename; required for processing, skipping...")
+                continue
             # Save the file into the temporary folder
+            os.makedirs(self.processing_dir, exist_ok=True)
             file_path = Path(self.processing_dir).joinpath(metadata['filename'])
             with open(file_path, "wb") as file:
+                binary_content = base64.decodebytes(base64_data)
                 file.write(binary_content)
             # Process the message
             result_data = self.diarize_audio(file_path)
@@ -190,23 +201,35 @@ class DiarizeWorker:
             result = {
                 "MessageID": message['MessageID'],
                 "MessageMetadata": message['MessageMetadata'],
-                "Result": result_data,
+                "MessageBody": result_data,
             }
             result_json = json.dumps(result)
 
             # Publish to result queue
             logging.info("Sending result for message ID '{}': {}".format(message['MessageID'], result_json))
-            self.pushing_connection = pika.BlockingConnection(pika.ConnectionParameters(
-                host=self.rabbitmq_host,
-                port=self.rabbitmq_port,
-                credentials=pika.credentials.PlainCredentials(username=self.rabbitmq_user, password=self.rabbitmq_pass),
-                heartbeat=30
-            ))
-            self.pushing_channel_ref = self.pushing_connection.channel()
-            self.pushing_channel_ref.queue_declare(queue=self.push_channel, durable=True)
-            self.pushing_channel_ref.basic_publish(exchange='', routing_key=self.push_channel, body=result_json)
-            self.pushing_channel_ref.close()
-            self.pushing_connection.close()
+            result_sent = False
+            while not result_sent:
+                try:
+                    self.pushing_connection = pika.BlockingConnection(pika.ConnectionParameters(
+                        host=self.rabbitmq_host,
+                        port=self.rabbitmq_port,
+                        credentials=pika.credentials.PlainCredentials(username=self.rabbitmq_user, password=self.rabbitmq_pass),
+                        heartbeat=30
+                    ))
+                    self.pushing_channel_ref = self.pushing_connection.channel()
+                    self.pushing_channel_ref.queue_declare(queue=self.push_channel, durable=True)
+                    self.pushing_channel_ref.basic_publish(exchange='', routing_key=self.push_channel, body=result_json)
+                    result_sent = True
+                    self.pushing_channel_ref.close()
+                    self.pushing_connection.close()
+                except Exception as e:
+                    if not result_sent:
+                        logging.error("Failed to send result: {0}".format(str(e)))
+                        logging.error("Retrying in 10 seconds...")
+                        time.sleep(10)
+                        continue
+                    else:
+                        logging.warning("Exception after sending result: {0}".format(str(e)))
 
     def diarize_audio(
             self,
