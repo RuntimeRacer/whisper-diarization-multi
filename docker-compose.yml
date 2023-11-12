@@ -1,0 +1,23 @@
+version: "3.9"
+services:
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: 'rabbitmq'
+    environment:
+        - RABBITMQ_DEFAULT_USER=diarizer
+        - RABBITMQ_DEFAULT_PASS=diarizer
+    ports:
+        - "5672:5672"
+        - "15672:15672"
+    volumes:
+        - ~/rabbitmq/conf/rabbitmq.config:/etc/rabbitmq/rabbitmq.config
+        - ~/rabbitmq/pki/:/etc/pki/
+        - ~/rabbitmq/data/:/var/lib/rabbitmq/
+        - ~/rabbitmq/log/:/var/log/rabbitmq/
+    networks:
+        - rabbitmq_net
+    restart: unless-stopped
+
+networks:
+  rabbitmq_net:
+    driver: bridge
