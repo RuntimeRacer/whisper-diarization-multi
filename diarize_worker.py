@@ -91,7 +91,7 @@ class DiarizeWorker:
                 logging.info("Polling Worker: Successfully connected to RabbitMQ host")
             except RuntimeError as e:
                 self.connection_active = False
-                logging.error("Polling Worker: Unable to connect to RabbitMQ host: {}".format(str(e)))
+                logging.error("Polling Worker: Unable to connect to RabbitMQ host: {0}".format(str(e)))
                 logging.error("Polling Worker: Retrying in 10 seconds...")
                 time.sleep(10)
                 continue
@@ -103,10 +103,10 @@ class DiarizeWorker:
             # Start listening
             try:
                 self.polling_channel_ref.basic_consume(queue=self.poll_channel, on_message_callback=self.handle_prompt_message)
-                logging.info("Listening for messages on queue {}...".format(self.poll_channel))
+                logging.info("Listening for messages on queue {0}...".format(self.poll_channel))
                 self.polling_channel_ref.start_consuming()
             except Exception as e:
-                logging.error("Lost connection to RabbitMQ host: {}".format(str(e)))
+                logging.error("Lost connection to RabbitMQ host: {0}".format(str(e)))
                 self.connection_active = False
                 logging.error("Waiting for processing thread to finish...")
                 # Shutdown cache processing thread
@@ -209,7 +209,7 @@ class DiarizeWorker:
             result_json = json.dumps(result)
 
             # Publish to result queue
-            logging.info("Processing for message ID '{}' completed. Sending result...".format(message['MessageID']))
+            logging.info("Processing for message ID '{0}' completed. Sending result...".format(message['MessageID']))
             result_sent = False
             while not result_sent:
                 try:
@@ -234,7 +234,7 @@ class DiarizeWorker:
                     else:
                         logging.warning("Exception after sending result: {0}".format(str(e)))
 
-            logging.info("Result for message ID '{}' was sent successfully!".format(message['MessageID']))
+            logging.info("Result for message ID '{0}' was sent successfully!".format(message['MessageID']))
 
     def diarize_audio(
             self,
