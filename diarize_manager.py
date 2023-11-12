@@ -313,8 +313,12 @@ class DiarizationProcessingThread(threading.Thread):
 
     def shutdown(self):
         self.active = False
-        self.polling_channel_ref.close()
-        self.polling_connection.close()
+        try:
+            self.polling_channel_ref.close()
+            self.polling_connection.close()
+        except Exception as e:
+            logging.warning("DiarizationProcessingThread-{0}: Error on closing connection: {1}".format(self.thread_id, str(e)))
+            pass
         self.connection_active = False
 
     def handle_result_message(self, channel, method, properties, body):
@@ -328,10 +332,12 @@ class DiarizationProcessingThread(threading.Thread):
         # Only process valid data
         if len(message_id) == 0:
             logging.warning("DiarizationProcessingThread-{}: Message received was invalid. Skipping...".format(self.thread_id))
+            channel.basic_ack(delivery_tag=method.delivery_tag)
             return
         elif len(message_body) == 0:
             logging.warning("DiarizationProcessingThread-{}: Message body received was empty. Assuming no valid speech in audio...".format(self.thread_id))
             self.upload_worker.mark_task_complete(message_id)
+            channel.basic_ack(delivery_tag=method.delivery_tag)
             return
 
         logging.debug("DiarizationProcessingThread-{}: Received result for task message with ID '{}'".format(self.thread_id, message_id))
