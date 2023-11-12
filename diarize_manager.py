@@ -1,28 +1,17 @@
 import argparse
 import base64
-import os
 import fnmatch
 import threading
 import time
 import uuid
-from typing import Callable, Any, Iterable, Mapping
-
-from concurrent.futures import ThreadPoolExecutor
+import sys
 
 import pika
 
 from helpers import *
-from faster_whisper import WhisperModel
-from tqdm import tqdm
-import whisperx
-import torch
-from pydub import AudioSegment
-from nemo.collections.asr.models.msdd_models import NeuralDiarizer
-from deepmultilingualpunctuation import PunctuationModel
-from transformers import pipeline
-import re
-import subprocess
+
 import logging
+from logging import Formatter
 
 
 # Initialize parser
@@ -361,6 +350,17 @@ class DiarizationProcessingThread(threading.Thread):
             self.global_args.sample_rate
         )
 
+
+# Init logger
+Formatter.converter = time.gmtime
+logging.basicConfig(
+    stream=sys.stdout,
+    level=logging.DEBUG,
+    format='[%(asctime)s] %(levelname)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S %z'
+)
+# Pika log level to warning to avoid logspam
+logging.getLogger("pika").setLevel(logging.WARNING)
 
 # Ensure output dir
 if not args.output_dir or args.output_dir in (None, ""):
