@@ -164,7 +164,7 @@ class DiarizeWorker:
             'MessageBody': message_body,
             'MessageMetadata': message_metadata
         })
-        logging.debug("Added message with ID {} to cache".format(message_id))
+        logging.debug("Added message with ID '{}' to cache".format(message_id))
 
         # Check for Cache capacity and block if reached
         if len(self.cached_messages) > self.cache_size:
@@ -207,7 +207,7 @@ class DiarizeWorker:
             result_json = json.dumps(result)
 
             # Publish to result queue
-            logging.info("Sending result for message ID '{}': {}".format(message['MessageID'], result_json))
+            logging.info("Processing for message ID '{}' completed. Sending result...".format(message['MessageID']))
             result_sent = False
             while not result_sent:
                 try:
@@ -231,6 +231,8 @@ class DiarizeWorker:
                         continue
                     else:
                         logging.warning("Exception after sending result: {0}".format(str(e)))
+
+            logging.info("Result for message ID '{}' was sent successfully!".format(message['MessageID']))
 
     def diarize_audio(
             self,

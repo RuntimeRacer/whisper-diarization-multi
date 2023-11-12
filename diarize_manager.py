@@ -176,7 +176,7 @@ class FileUploaderManagerThread(threading.Thread):
                 message_json = json.dumps(message)
 
                 # Publish to task queue
-                logging.info("Sending message ID '{}' for file {} ({} bytes)".format(message['MessageID'], next_file, len(message_json)))
+                logging.info("Sending task message ID '{}' for file {} ({} bytes)".format(message['MessageID'], next_file, len(message_json)))
                 message_sent = False
                 while not message_sent:
                     try:
@@ -194,12 +194,12 @@ class FileUploaderManagerThread(threading.Thread):
                         self.pushing_connection.close()
                     except Exception as e:
                         if not message_sent:
-                            logging.error("Failed to send tsk: {0}".format(str(e)))
+                            logging.error("Failed to send task message: {0}".format(str(e)))
                             logging.error("Retrying in 10 seconds...")
                             time.sleep(10)
                             continue
                         else:
-                            logging.warning("Exception after sending task: {0}".format(str(e)))
+                            logging.warning("Exception after sending task message: {0}".format(str(e)))
 
                 # Mark file as pending
                 self.files_in_queue[message['MessageID']] = {
@@ -230,6 +230,7 @@ class FileUploaderManagerThread(threading.Thread):
             pending = len(self.pending_files)
             hours, rem = divmod(time.time() - start_time, 3600)
             minutes, seconds = divmod(rem, 60)
+            logging.info("--------------------------------------------------------------------------------------------------")
             logging.info("Currently {0} files in queue; {1} pending files of {2} files total. {3}% done - Time elapsed: {4}.".format(
                 len(self.files_in_queue),
                 pending,
@@ -237,9 +238,10 @@ class FileUploaderManagerThread(threading.Thread):
                 round((1-(pending/self.total_files_count))*100, 2),
                 "{:0>2}:{:0>2}:{:05.2f}".format(int(hours), int(minutes), seconds)
             ))
+            logging.info("--------------------------------------------------------------------------------------------------")
 
-            # Sleep 60 second between each loop
-            time.sleep(60)
+            # Sleep 10 second between each loop
+            time.sleep(10)
 
         # Everything has been successfully processed. End thread
         logging.info("All files have been processed successfully")
@@ -279,7 +281,7 @@ class DiarizationProcessingThread(threading.Thread):
             # Connect to RabbitMQ
             if not self.connection_active:
                 try:
-                    logging.info("DiarizationProcessingThread: Establishing connection...")
+                    logging.info("DiarizationProcessingThread-{}: : Establishing connection...".format(self.thread_id))
                     self.polling_connection = pika.BlockingConnection(pika.ConnectionParameters(
                         host=self.global_args.rabbitmq_host,
                         port=self.global_args.rabbitmq_port,
@@ -289,21 +291,21 @@ class DiarizationProcessingThread(threading.Thread):
                     self.polling_channel_ref = self.polling_connection.channel()
                     self.polling_channel_ref.queue_declare(queue=self.global_args.result_channel, durable=True)
                     self.connection_active = True
-                    logging.info("DiarizationProcessingThread: Successfully connected to RabbitMQ host")
+                    logging.info("DiarizationProcessingThread-{}: : Successfully connected to RabbitMQ host".format(self.thread_id))
                 except RuntimeError as e:
                     self.connection_active = False
-                    logging.error("DiarizationProcessingThread: Unable to connect to RabbitMQ host: {}".format(str(e)))
-                    logging.error("DiarizationProcessingThread: Retrying in 10 seconds...")
+                    logging.error("DiarizationProcessingThread-{}: : Unable to connect to RabbitMQ host: {}".format(self.thread_id, str(e)))
+                    logging.error("DiarizationProcessingThread-{}: : Retrying in 10 seconds...".format(self.thread_id))
                     time.sleep(10)
                     continue
 
             # Start listening
             try:
                 self.polling_channel_ref.basic_consume(queue=self.global_args.result_channel, on_message_callback=self.handle_result_message, auto_ack=True)
-                logging.info("Listening for messages on queue {}...".format(self.global_args.result_channel))
+                logging.info("DiarizationProcessingThread-{}: Listening for messages on queue {}...".format(self.thread_id, self.global_args.result_channel))
                 self.polling_channel_ref.start_consuming()
             except Exception as e:
-                logging.error("Lost connection to RabbitMQ host: {}".format(str(e)))
+                logging.error("DiarizationProcessingThread-{}: Lost connection to RabbitMQ host: {}".format(self.thread_id, str(e)))
                 self.connection_active = False
 
         logging.info("DiarizationProcessingThread-{0} finished execution".format(self.thread_id))
@@ -316,7 +318,7 @@ class DiarizationProcessingThread(threading.Thread):
 
     def handle_result_message(self, channel, method, properties, body):
         # Parse message
-        logging.info("Received message from channel '{}': {}".format(self.global_args.result_channel, body))
+        logging.info("DiarizationProcessingThread-{}: Received message from channel '{}'".format(self.thread_id, self.global_args.result_channel))
         data = json.loads(body)
         message_id = data['MessageID'] if 'MessageID' in data else ''
         message_body = data['MessageBody'] if 'MessageBody' in data else ''
@@ -324,10 +326,10 @@ class DiarizationProcessingThread(threading.Thread):
 
         # Only process valid data
         if len(message_id) == 0 or len(message_body) == 0:
-            logging.warning("Message received was invalid. Skipping...")
+            logging.warning("DiarizationProcessingThread-{}: Message received was invalid. Skipping...".format(self.thread_id))
             return
 
-        logging.debug("Recieved result for task message with ID {}".format(message_id))
+        logging.debug("DiarizationProcessingThread-{}: Received result for task message with ID '{}'".format(self.thread_id, message_id))
         # Get Metadata and Mark as done in upload worker
         metadata = self.upload_worker.get_task_metadata(message_id)
         self.upload_worker.mark_task_complete(message_id)
