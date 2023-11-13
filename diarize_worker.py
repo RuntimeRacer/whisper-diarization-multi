@@ -12,6 +12,7 @@ import torch
 import requests
 import logging
 
+from pika import frame
 from helpers import *
 from faster_whisper import WhisperModel
 from pathlib import Path
@@ -171,8 +172,9 @@ class DiarizeWorker:
         # Check for Cache capacity and block if reached
         if len(self.cached_messages) > self.cache_size:
             logging.debug("Cache is full, waiting for clearance...")
-        # while len(self.cached_messages) > self.cache_size:
-        #     time.sleep(0.1)
+        while len(self.cached_messages) > self.cache_size:
+            time.sleep(5)
+            self.polling_connection._send_frame(frame.Heartbeat())
 
     def process_cached_messages(self):
         while len(self.cached_messages) > 0:
