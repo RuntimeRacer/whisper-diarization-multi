@@ -302,6 +302,7 @@ class DiarizationResultProcessor(threading.Thread):
                         heartbeat=30
                     ))
                     self.polling_channel_ref = self.polling_connection.channel()
+                    self.polling_channel_ref.basic_qos(prefetch_count=self.cache_size)
                     self.polling_channel_ref.queue_declare(queue=self.global_args.result_channel, durable=True)
                     self.connection_active = True
                     logging.info("DiarizationResultProcessor-{0}: : Successfully connected to RabbitMQ host".format(self.thread_id))
