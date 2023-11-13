@@ -174,7 +174,7 @@ class DiarizeWorker:
             logging.debug("Cache is full, waiting for clearance...")
         while len(self.cached_messages) > self.cache_size:
             time.sleep(5)
-            self.polling_connection._send_frame(frame.Heartbeat())
+            self.polling_connection.process_data_events()
 
     def process_cached_messages(self):
         while len(self.cached_messages) > 0:

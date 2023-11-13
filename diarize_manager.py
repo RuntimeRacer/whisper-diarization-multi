@@ -377,7 +377,7 @@ class DiarizationResultProcessor(threading.Thread):
             logging.debug("DiarizationResultProcessor-{0}: Cache is full, waiting for clearance...".format(self.thread_id))
         while len(self.cached_messages) > self.cache_size:
             time.sleep(5)
-            self.polling_connection._send_frame(frame.Heartbeat())
+            self.polling_connection.process_data_events()
 
     def process_cached_messages(self):
         while len(self.cached_messages) > 0:
