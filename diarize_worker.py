@@ -103,6 +103,7 @@ class DiarizeWorker:
             # Start listening
             try:
                 self.polling_channel_ref.basic_consume(queue=self.poll_channel, on_message_callback=self.handle_prompt_message)
+                self.polling_channel_ref.basic_qos(prefetch_size=self.cache_size)
                 logging.info("Listening for messages on queue {0}...".format(self.poll_channel))
                 self.polling_channel_ref.start_consuming()
             except Exception as e:
@@ -162,28 +163,33 @@ class DiarizeWorker:
         self.cached_messages.append({
             'MessageID': message_id,
             'MessageBody': message_body,
-            'MessageMetadata': message_metadata
+            'MessageMetadata': message_metadata,
+            'ChannelRef': channel,
+            'DeliveryTag': method.delivery_tag
         })
         logging.debug("Added message with ID '{}' to cache".format(message_id))
-        # Send ACK to tasks channel
-        channel.basic_ack(delivery_tag=method.delivery_tag)
 
         # Check for Cache capacity and block if reached
         if len(self.cached_messages) > self.cache_size:
-            logging.debug("Cache is full, waiting for clearance...".format(message_id))
-        while len(self.cached_messages) > self.cache_size:
-            time.sleep(0.1)
+            logging.debug("Cache is full, waiting for clearance...")
+        # while len(self.cached_messages) > self.cache_size:
+        #     time.sleep(0.1)
 
     def process_cached_messages(self):
         while len(self.cached_messages) > 0:
             # Get first message from cache
             message = self.cached_messages[0]
+            # Get RabbitMQ related data
+            channel = message['ChannelRef']
+            delivery_tag = message['DeliveryTag']
             # Decode Message Body from Base64 to binary
             base64_data = message['MessageBody'].encode('utf-8')
             # Get filename from metadata
             metadata = message['MessageMetadata']
             if 'filename' not in metadata:
                 logging.error("message does not contain filename; required for processing, skipping...")
+                # Send ACK to tasks channel
+                channel.basic_ack(delivery_tag=delivery_tag)
                 continue
             # Save the file into the temporary folder
             os.makedirs(self.processing_dir, exist_ok=True)
@@ -199,6 +205,8 @@ class DiarizeWorker:
 
             # Remove message from cache, AFTER being processed
             self.cached_messages.pop(0)
+            # Send ACK to tasks channel
+            channel.basic_ack(delivery_tag=delivery_tag)
 
             # Build Result
             result = {

@@ -211,20 +211,20 @@ class FileUploaderManagerThread(threading.Thread):
                 continue
 
             # Check for timeouts among files in queue
-            files_to_reset = []
-            for message_id, file_status in self.files_in_queue.items():
-                current_time = time.time()
-                submit_time = file_status['submit_time']
-                seconds_elapsed = current_time - submit_time
-                if seconds_elapsed > self.processing_timeout:
-                    files_to_reset.append(message_id)
-
-            # Remove files in timeout from queue and append them back to the pending list
-            for _, message_id in files_to_reset:
-                filepath = self.files_in_queue[message_id]['path']
-                del self.files_in_queue[message_id]
-                self.pending_files.append(filepath)
-                logging.info("Removed file {0} from in-progress-queue due to {1} seconds of inactivity.".format(filepath, self.processing_timeout))
+            # files_to_reset = []
+            # for message_id, file_status in self.files_in_queue.items():
+            #     current_time = time.time()
+            #     submit_time = file_status['submit_time']
+            #     seconds_elapsed = current_time - submit_time
+            #     if seconds_elapsed > self.processing_timeout:
+            #         files_to_reset.append(message_id)
+            #
+            # # Remove files in timeout from queue and append them back to the pending list
+            # for message_id in files_to_reset:
+            #     filepath = self.files_in_queue[message_id]['path']
+            #     del self.files_in_queue[message_id]
+            #     self.pending_files.append(filepath)
+            #     logging.info("Removed file {0} from in-progress-queue due to {1} seconds of inactivity.".format(filepath, self.processing_timeout))
 
             # Print status info
             queued = len(self.files_in_queue)
@@ -255,13 +255,14 @@ class FileUploaderManagerThread(threading.Thread):
         del self.files_in_queue[message_id]
 
 
-class DiarizationProcessingThread(threading.Thread):
+class DiarizationResultProcessor(threading.Thread):
 
     def __init__(
             self,
             thread_id,
             upload_worker,
-            global_args
+            global_args,
+            cache_size = 1
     ):
         # execute the base constructor
         threading.Thread.__init__(self)
@@ -273,6 +274,9 @@ class DiarizationProcessingThread(threading.Thread):
 
         # Message Handling params
         self.connection_active = False
+        self.cache_thread = None
+        self.cache_size = cache_size
+        self.cached_messages = []
         self.polling_connection = None
         self.polling_channel_ref = None
 
@@ -282,7 +286,7 @@ class DiarizationProcessingThread(threading.Thread):
             # Connect to RabbitMQ
             if not self.connection_active:
                 try:
-                    logging.info("DiarizationProcessingThread-{0}: : Establishing connection...".format(self.thread_id))
+                    logging.info("DiarizationResultProcessor-{0}: : Establishing connection...".format(self.thread_id))
                     self.polling_connection = pika.BlockingConnection(pika.ConnectionParameters(
                         host=self.global_args.rabbitmq_host,
                         port=self.global_args.rabbitmq_port,
@@ -292,24 +296,37 @@ class DiarizationProcessingThread(threading.Thread):
                     self.polling_channel_ref = self.polling_connection.channel()
                     self.polling_channel_ref.queue_declare(queue=self.global_args.result_channel, durable=True)
                     self.connection_active = True
-                    logging.info("DiarizationProcessingThread-{0}: : Successfully connected to RabbitMQ host".format(self.thread_id))
+                    logging.info("DiarizationResultProcessor-{0}: : Successfully connected to RabbitMQ host".format(self.thread_id))
                 except RuntimeError as e:
                     self.connection_active = False
-                    logging.error("DiarizationProcessingThread-{0}: : Unable to connect to RabbitMQ host: {1}".format(self.thread_id, str(e)))
-                    logging.error("DiarizationProcessingThread-{0}: : Retrying in 10 seconds...".format(self.thread_id))
+                    logging.error("DiarizationResultProcessor-{0}: : Unable to connect to RabbitMQ host: {1}".format(self.thread_id, str(e)))
+                    logging.error("DiarizationResultProcessor-{0}: : Retrying in 10 seconds...".format(self.thread_id))
                     time.sleep(10)
                     continue
 
+            # Add cache processing thread and start it
+            self.cache_thread = CacheProcessingThread(worker=self)
+            self.cache_thread.start()
+
             # Start listening
             try:
-                self.polling_channel_ref.basic_consume(queue=self.global_args.result_channel, on_message_callback=self.handle_result_message, auto_ack=True)
-                logging.info("DiarizationProcessingThread-{0}: Listening for messages on queue {1}...".format(self.thread_id, self.global_args.result_channel))
+                self.polling_channel_ref.basic_consume(queue=self.global_args.result_channel, on_message_callback=self.handle_result_message)
+                self.polling_channel_ref.basic_qos(prefetch_size=self.cache_size)
+                logging.info("DiarizationResultProcessor-{0}: Listening for messages on queue {1}...".format(self.thread_id, self.global_args.result_channel))
                 self.polling_channel_ref.start_consuming()
             except Exception as e:
-                logging.error("DiarizationProcessingThread-{0}: Lost connection to RabbitMQ host: {1}".format(self.thread_id, str(e)))
+                logging.error("DiarizationResultProcessor-{0}: Lost connection to RabbitMQ host: {1}".format(self.thread_id, str(e)))
                 self.connection_active = False
+                # Shutdown cache processing thread
+                logging.error("DiarizationResultProcessor-{0}: Waiting for processing thread to finish...".format(self.thread_id))
+                self.cache_thread.active = False
+                self.cache_thread.join()
 
-        logging.info("DiarizationProcessingThread-{0} finished execution".format(self.thread_id))
+        # Shutdown cache processing thread
+        logging.error("DiarizationResultProcessor-{0}: Waiting for processing thread to finish...".format(self.thread_id))
+        self.cache_thread.active = False
+        self.cache_thread.join()
+        logging.info("DiarizationResultProcessor-{0} finished execution".format(self.thread_id))
 
     def shutdown(self):
         self.active = False
@@ -317,13 +334,13 @@ class DiarizationProcessingThread(threading.Thread):
             self.polling_channel_ref.close()
             self.polling_connection.close()
         except Exception as e:
-            logging.warning("DiarizationProcessingThread-{0}: Error on closing connection: {1}".format(self.thread_id, str(e)))
+            logging.warning("DiarizationResultProcessor-{0}: Error on closing connection: {1}".format(self.thread_id, str(e)))
             pass
         self.connection_active = False
 
     def handle_result_message(self, channel, method, properties, body):
         # Parse message
-        logging.info("DiarizationProcessingThread-{0}: Received message from channel '{1}'".format(self.thread_id, self.global_args.result_channel))
+        logging.info("DiarizationResultProcessor-{0}: Received message from channel '{1}'".format(self.thread_id, self.global_args.result_channel))
         data = json.loads(body)
         message_id = data['MessageID'] if 'MessageID' in data else ''
         message_body = data['MessageBody'] if 'MessageBody' in data else ''
@@ -331,27 +348,61 @@ class DiarizationProcessingThread(threading.Thread):
 
         # Only process valid data
         if len(message_id) == 0:
-            logging.warning("DiarizationProcessingThread-{0}: Message received was invalid. Skipping...".format(self.thread_id))
-            # channel.basic_ack(delivery_tag=method.delivery_tag)
+            logging.warning("DiarizationResultProcessor-{0}: Message received was invalid. Skipping...".format(self.thread_id))
+            channel.basic_ack(delivery_tag=method.delivery_tag)
             return
         elif len(message_body) == 0:
-            logging.warning("DiarizationProcessingThread-{0}: Message body received was empty. Assuming no valid speech in audio...".format(self.thread_id))
+            logging.warning("DiarizationResultProcessor-{0}: Message body received was empty. Assuming no valid speech in audio...".format(self.thread_id))
             self.upload_worker.mark_task_complete(message_id)
-            # channel.basic_ack(delivery_tag=method.delivery_tag)
+            channel.basic_ack(delivery_tag=method.delivery_tag)
             return
 
-        logging.debug("DiarizationProcessingThread-{0}: Received result for task message with ID '{1}'".format(self.thread_id, message_id))
-        # Get Metadata
-        metadata = self.upload_worker.get_task_metadata(message_id)
-        # Get Path from Metadata
-        filepath = metadata['path']
+        logging.debug("DiarizationResultProcessor-{0}: Received result for task message with ID '{1}'".format(self.thread_id, message_id))
 
-        # Start Splitting the Audio based on result data
-        self.split_transcribed_file(filepath, message_body)
-        # Mark task as done in upload worker
-        self.upload_worker.mark_task_complete(message_id)
-        # Send ACK to result channel
-        # channel.basic_ack(delivery_tag=method.delivery_tag)
+        # Add to cache - Before checking cache size
+        # This ensures we always process at least one message, even if cache is set to 0, because
+        # due to async nature oft the worker, it will always pull at least 1 message no matter what.
+        # Cache check will check cache size after adding the message, so this pulling connection is blocked until
+        # Cache is freed up again.
+        self.cached_messages.append({
+            'MessageID': message_id,
+            'MessageBody': message_body,
+            'MessageMetadata': message_metadata,
+            'ChannelRef': channel,
+            'DeliveryTag': method.delivery_tag
+        })
+        logging.debug("DiarizationResultProcessor-{0}: Added message with ID '{1}' to cache".format(self.thread_id, message_id))
+
+        # Check for Cache capacity and block if reached
+        if len(self.cached_messages) > self.cache_size:
+            logging.debug("DiarizationResultProcessor-{0}: Cache is full, waiting for clearance...".format(self.thread_id))
+        # while len(self.cached_messages) > self.cache_size:
+        #     time.sleep(0.1)
+
+    def process_cached_messages(self):
+        while len(self.cached_messages) > 0:
+            # Get first message from cache
+            message = self.cached_messages[0]
+            message_id = message['MessageID']
+            message_body = message['MessageBody']
+            # Get RabbitMQ related data
+            channel = message['ChannelRef']
+            delivery_tag = message['DeliveryTag']
+
+            # Get Metadata
+            metadata = self.upload_worker.get_task_metadata(message_id)
+            # Get Path from Metadata
+            filepath = metadata['path']
+
+            # Start Splitting the Audio based on result data
+            self.split_transcribed_file(filepath, message_body)
+            # Mark task as done in upload worker
+            self.upload_worker.mark_task_complete(message_id)
+
+            # Remove message from cache, AFTER being processed
+            self.cached_messages.pop(0)
+            # Send ACK to tasks channel
+            channel.basic_ack(delivery_tag=delivery_tag)
 
     def split_transcribed_file(
             self,
@@ -365,6 +416,28 @@ class DiarizationProcessingThread(threading.Thread):
             sentence_data,
             self.global_args.sample_rate
         )
+
+
+class CacheProcessingThread(threading.Thread):
+
+    def __init__(self, worker: DiarizationResultProcessor):
+        # execute the base constructor
+        threading.Thread.__init__(self)
+        # store the reference
+        self.worker = worker
+        # Internal vars
+        self.active = False
+
+    def run(self):
+        if self.worker is not None:
+            logging.info("DiarizationResultProcessor-{0}: Starting Cache Processing Thread".format(self.worker.thread_id))
+            self.active = True
+            while self.active:
+                self.worker.process_cached_messages()
+                # Sleep if not processing anything
+                time.sleep(0.01)
+        else:
+            raise RuntimeError("RabbitMQ Worker not initialized")
 
 
 # Init logger
@@ -408,7 +481,7 @@ upload_worker = FileUploaderManagerThread(
 # Build Result Processing Threads
 for t_id in range(0, args.threads):
     # Init the thread
-    processing_thread = DiarizationProcessingThread(
+    processing_thread = DiarizationResultProcessor(
         thread_id=t_id,
         global_args=args,
         upload_worker=upload_worker

@@ -352,6 +352,7 @@
 # frame_max = 131072
 
 ## Set the max permissible size of an AMQP message body (in bytes).
+## Cloud-Diarize: Defaulting to 512MB - 1B
 ##
 max_message_size = 536870911
 
@@ -630,12 +631,13 @@ max_message_size = 536870911
 ## on Windows.
 # motd_file = /etc/rabbitmq/motd
 
-## Consumer timeout
+## Consumer timeout (miliseconds)
 ## If a message delivered to a consumer has not been acknowledge before this timer
 ## triggers the channel will be force closed by the broker. This ensure that
 ## faultly consumers that never ack will not hold on to messages indefinitely.
+## Cloud-Diarize: Defaulting to 6h
 ##
-# consumer_timeout = 900000
+consumer_timeout = 21600000
 
 ## ----------------------------------------------------------------------------
 ## Advanced Erlang Networking/Clustering Options.
