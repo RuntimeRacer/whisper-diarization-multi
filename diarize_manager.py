@@ -5,9 +5,9 @@ import threading
 import time
 import uuid
 import sys
-
+import functools
 import pika
-from pika import frame
+
 from helpers import *
 
 import logging
@@ -124,6 +124,14 @@ parser.add_argument(
 )
 
 args = parser.parse_args()
+
+
+def ack_message(ch, delivery_tag):
+    if ch.is_open:
+        ch.basic_ack(delivery_tag)
+    else:
+        # Channel is already closed, so we can't ACK this message;
+        pass
 
 
 class FileUploaderManagerThread(threading.Thread):
@@ -401,8 +409,9 @@ class DiarizationResultProcessor(threading.Thread):
 
             # Remove message from cache, AFTER being processed
             self.cached_messages.pop(0)
-            # Send ACK to tasks channel
-            channel.basic_ack(delivery_tag=delivery_tag)
+            # Send ACK to results channel
+            cb = functools.partial(ack_message, channel, delivery_tag)
+            self.polling_connection.add_callback_threadsafe(cb)
 
     def split_transcribed_file(
             self,

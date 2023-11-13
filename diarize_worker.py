@@ -1,7 +1,5 @@
 # RabbitMQ request processor for Cloud-Diarize - (c) 2023 RuntimeRacer
 import base64
-import json
-import os
 import argparse
 import sys
 import threading
@@ -9,7 +7,7 @@ import time
 
 import pika
 import torch
-import requests
+import functools
 import logging
 
 from pika import frame
@@ -17,6 +15,14 @@ from helpers import *
 from faster_whisper import WhisperModel
 from pathlib import Path
 from logging import Formatter
+
+
+def ack_message(ch, delivery_tag):
+    if ch.is_open:
+        ch.basic_ack(delivery_tag)
+    else:
+        # Channel is already closed, so we can't ACK this message;
+        pass
 
 
 class DiarizeWorker:
@@ -207,7 +213,8 @@ class DiarizeWorker:
             # Remove message from cache, AFTER being processed
             self.cached_messages.pop(0)
             # Send ACK to tasks channel
-            channel.basic_ack(delivery_tag=delivery_tag)
+            cb = functools.partial(ack_message, channel, delivery_tag)
+            self.polling_connection.add_callback_threadsafe(cb)
 
             # Build Result
             result = {
