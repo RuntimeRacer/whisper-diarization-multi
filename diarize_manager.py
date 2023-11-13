@@ -311,7 +311,6 @@ class DiarizationResultProcessor(threading.Thread):
             # Start listening
             try:
                 self.polling_channel_ref.basic_consume(queue=self.global_args.result_channel, on_message_callback=self.handle_result_message)
-                self.polling_channel_ref.basic_qos(prefetch_size=self.cache_size)
                 logging.info("DiarizationResultProcessor-{0}: Listening for messages on queue {1}...".format(self.thread_id, self.global_args.result_channel))
                 self.polling_channel_ref.start_consuming()
             except Exception as e:

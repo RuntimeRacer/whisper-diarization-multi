@@ -103,7 +103,6 @@ class DiarizeWorker:
             # Start listening
             try:
                 self.polling_channel_ref.basic_consume(queue=self.poll_channel, on_message_callback=self.handle_prompt_message)
-                self.polling_channel_ref.basic_qos(prefetch_size=self.cache_size)
                 logging.info("Listening for messages on queue {0}...".format(self.poll_channel))
                 self.polling_channel_ref.start_consuming()
             except Exception as e:
