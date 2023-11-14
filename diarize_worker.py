@@ -34,7 +34,7 @@ class DiarizeWorker:
             rabbitmq_port: int,
             poll_channel: str,
             push_channel: str,
-            processing_dir: str = '/tmp/',
+            processing_dir: str = '~/diarize_worker_tmp/',
             model_name: str = 'medium.en',
             device: str = 'cuda:0',
             cache_size: int = 1
@@ -337,7 +337,7 @@ if __name__ == "__main__":
     parser.add_argument("-pu", "--push_channel", type=str, default="diarize_results", help="name if the rabbitmq channel to push results to")
 
     # Worker Parameters
-    parser.add_argument("-pd", "--processing_dir", type=str, default='/tmp/', help="path to the processing directory to store temporary files")
+    parser.add_argument("-pd", "--processing_dir", type=str, default='~/diarize_worker_tmp/', help="path to the processing directory to store temporary files")
     parser.add_argument("-cs", "--cache_size", type=int, default=1, help="amount of messages to cache while processing")
     parser.add_argument("--whisper-model", dest="model_name", default="medium.en", help="name of the Whisper model to use")
     parser.add_argument("--device", dest="device", default="cuda:0" if torch.cuda.is_available() else "cpu", help="specifies device to execute this worker on")
