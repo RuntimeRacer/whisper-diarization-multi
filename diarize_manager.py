@@ -475,7 +475,7 @@ for path, _, files in os.walk(args.audio_dir):
             file_path = os.path.join(path, filename)
             # Determine target fil path and check if initial file exists
             target_file_path = os.path.splitext(file_path)[0]
-            target_file_path = file_path.replace(target_file_path, args.output_dir)
+            target_file_path = target_file_path.replace(args.audio_dir, args.output_dir)
             target_file_path = Path("{0}_{1}.flac".format(target_file_path, 0))
             print(target_file_path)
             if target_file_path.is_file():
