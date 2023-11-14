@@ -477,13 +477,10 @@ for path, _, files in os.walk(args.audio_dir):
             target_file_path = os.path.splitext(file_path)[0]
             target_file_path = target_file_path.replace(args.audio_dir, args.output_dir)
             target_file_path = Path("{0}_{1}.flac".format(target_file_path, 0))
-            print(target_file_path)
             if target_file_path.is_file():
                 logging.info("Skipping already transcribed file: {0}".format(file_path))
                 continue
             file_list.append(file_path)
-
-exit()
 
 # Build Processing pipeline
 thread_list = []
