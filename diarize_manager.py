@@ -444,6 +444,7 @@ class DiarizationResultProcessor(threading.Thread):
             # Send ACK to results channel
             cb = functools.partial(ack_message, channel, delivery_tag)
             self.polling_connection.add_callback_threadsafe(cb)
+            logging.debug("DiarizationResultProcessor-{0}: Finished processing message with ID '{1}'.".format(self.thread_id, message_id))
 
     def split_transcribed_file(
             self,
