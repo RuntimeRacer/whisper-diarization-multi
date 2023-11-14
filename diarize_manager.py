@@ -256,8 +256,38 @@ class FileUploaderManagerThread(threading.Thread):
         logging.info("All files have been processed successfully")
         self.active = False
 
-    def get_task_metadata(self, message_id):
-        return self.files_in_queue[message_id]
+    def get_task_context(self, message_id, message_metadata):
+        # Try to get context from queue list
+        # If task not found in list (e.g. after restart), try to restore it.
+        try:
+            context = self.files_in_queue[message_id]
+        except KeyError as e:
+            logging.warning("Message ID '{0}' was not found in queue. To avoid loss of progress, trying to find matching local file via message metadata.".format(message_id))
+
+            context = None
+
+            if 'filename' not in message_metadata:
+                logging.error("filename missing in message metadata. Queue might have been corrupted.")
+                raise e
+
+            file_name = message_metadata['filename']
+            for check_path, _, check_files in os.walk(self.global_args.audio_dir):
+                for check_name in files:
+                    if file_name == check_name:
+                        # Mark file as pending
+                        context = {
+                            "path": os.path.join(check_path, file_name),
+                            "submit_time": time.time()
+                        }
+                        self.files_in_queue[message_id] = context
+                        logging.warning("Successfully restored task context for message ID '{0}'.".format(message_id))
+                        return context
+
+            if context is None:
+                logging.error("Unable to find returned file locally.")
+                raise e
+
+        return context
 
     def mark_task_complete(self, message_id):
         del self.files_in_queue[message_id]
@@ -394,14 +424,15 @@ class DiarizationResultProcessor(threading.Thread):
             message = self.cached_messages[0]
             message_id = message['MessageID']
             message_body = message['MessageBody']
+            message_metadata = message['MessageMetadata']
             # Get RabbitMQ related data
             channel = message['ChannelRef']
             delivery_tag = message['DeliveryTag']
 
-            # Get Metadata
-            metadata = self.upload_worker.get_task_metadata(message_id)
+            # Get Task Context
+            context = self.upload_worker.get_task_context(message_id, message_metadata)
             # Get Path from Metadata
-            filepath = metadata['path']
+            filepath = context['path']
 
             # Start Splitting the Audio based on result data
             self.split_transcribed_file(filepath, message_body)
