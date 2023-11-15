@@ -81,7 +81,7 @@ if __name__ == "__main__":
                 "--whisper-model",
                 args.model,
                 ">",
-                "{0}worker-{1}_thread-{2}".format(args.logdir, dId, tId)
+                "{0}worker-{1}_thread-{2}.log".format(args.logdir, dId, tId)
             ]
 
             handle = subprocess.Popen(worker_args)
