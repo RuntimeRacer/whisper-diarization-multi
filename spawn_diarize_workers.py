@@ -1,5 +1,6 @@
 import argparse
 import logging
+import os
 import sys
 import time
 import torch
@@ -51,9 +52,12 @@ if __name__ == "__main__":
         devices.append("cpu")
         args.threads = 1
 
+    # Ensure logdir
+    os.makedirs(args.logdir, exist_ok=True)
+
     # Spawn processes for each device
     process_handles = []
-    for dId, device in devices:
+    for dId, device in enumerate(devices):
         for tId in range(args.threads):
             worker_args = [
                 "python3",
