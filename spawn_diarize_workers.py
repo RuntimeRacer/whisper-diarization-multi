@@ -37,7 +37,7 @@ if __name__ == "__main__":
 
     # Spawner params
     parser.add_argument("-t", "--threads", type=int, default=1, help="amount of threads to spawn per device")
-    parser.add_argument("-l", "--logdir", type=str, default='/var/log/diarize_workers/', help="path to the processing directory to store temporary files")
+    parser.add_argument("-l", "--logdir", type=str, default='~/diarize_worker_logs/', help="path to the processing directory to store temporary files")
 
     # Get args from parser
     args = parser.parse_args()
