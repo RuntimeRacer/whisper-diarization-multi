@@ -290,7 +290,10 @@ class FileUploaderManagerThread(threading.Thread):
         return context
 
     def mark_task_complete(self, message_id):
-        del self.files_in_queue[message_id]
+        if message_id in self.files_in_queue:
+            del self.files_in_queue[message_id]
+        else:
+            logging.warning("Message ID '{0}' was not found in queue; this warning can be ignored since processing is done anyways.".format(message_id))
 
 
 class DiarizationResultProcessor(threading.Thread):
