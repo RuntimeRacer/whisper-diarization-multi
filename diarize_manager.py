@@ -329,7 +329,7 @@ class DiarizationResultProcessor(threading.Thread):
                         host=self.global_args.rabbitmq_host,
                         port=self.global_args.rabbitmq_port,
                         credentials=pika.credentials.PlainCredentials(username=self.global_args.rabbitmq_user, password=self.global_args.rabbitmq_pass),
-                        heartbeat=300
+                        heartbeat=1800
                     ))
                     self.polling_channel_ref = self.polling_connection.channel()
                     self.polling_channel_ref.basic_qos(prefetch_count=self.cache_size)

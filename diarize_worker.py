@@ -90,7 +90,7 @@ class DiarizeWorker:
                     host=self.rabbitmq_host,
                     port=self.rabbitmq_port,
                     credentials=pika.credentials.PlainCredentials(username=self.rabbitmq_user, password=self.rabbitmq_pass),
-                    heartbeat=300
+                    heartbeat=1800
                 ))
                 self.polling_channel_ref = self.polling_connection.channel()
                 self.polling_channel_ref.basic_qos(prefetch_count=self.cache_size)
