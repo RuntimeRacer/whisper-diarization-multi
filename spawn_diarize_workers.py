@@ -80,7 +80,9 @@ if __name__ == "__main__":
                 "-cs",
                 str(args.cache_size),
                 "--whisper-model",
-                args.model
+                args.model,
+                "--device",
+                device
             ]
 
             log_handle = open("{0}worker-{1}_thread-{2}.log".format(args.logdir, dId, tId), 'w')
