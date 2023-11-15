@@ -31,13 +31,13 @@ if __name__ == "__main__":
     parser.add_argument("-pu", "--push_channel", type=str, default="diarize_results", help="name if the rabbitmq channel to push results to")
 
     # Worker Parameters
-    parser.add_argument("-pd", "--processing_dir", type=str, default='~/diarize_worker_tmp/', help="path to the processing directory to store temporary files")
+    parser.add_argument("-pd", "--processing_dir", type=str, default='diarize_worker_tmp/', help="path to the processing directory to store temporary files")
     parser.add_argument("-cs", "--cache_size", type=int, default=1, help="amount of messages to cache while processing")
     parser.add_argument("-m", "--model", type=str, default="medium.en", help="name of the Whisper model to use")
 
     # Spawner params
     parser.add_argument("-t", "--threads", type=int, default=1, help="amount of threads to spawn per device")
-    parser.add_argument("-l", "--logdir", type=str, default='~/diarize_worker_logs/', help="path to the processing directory to store temporary files")
+    parser.add_argument("-l", "--logdir", type=str, default='diarize_worker_logs/', help="path to the processing directory to store temporary files")
 
     # Get args from parser
     args = parser.parse_args()
