@@ -56,6 +56,7 @@ if __name__ == "__main__":
     os.makedirs(args.logdir, exist_ok=True)
 
     # Spawn processes for each device
+    log_handles = []
     process_handles = []
     for dId, device in enumerate(devices):
         for tId in range(args.threads):
@@ -79,13 +80,13 @@ if __name__ == "__main__":
                 "-cs",
                 str(args.cache_size),
                 "--whisper-model",
-                args.model,
-                ">",
-                "{0}worker-{1}_thread-{2}.log".format(args.logdir, dId, tId)
+                args.model
             ]
 
-            handle = subprocess.Popen(worker_args)
-            process_handles.append(handle)
+            log_handle = open("{0}worker-{1}_thread-{2}.log".format(args.logdir, dId, tId), 'w')
+            process_handle = subprocess.Popen(worker_args, stderr=subprocess.STDOUT, stdout=log_handle)
+            process_handles.append(process_handle)
+            log_handles.append(log_handle)
 
     # Run continous control loop until we abort the script
     logging.info("Launched {0} worker tasks on {1} devices".format(len(process_handles), len(devices)))
@@ -100,6 +101,15 @@ if __name__ == "__main__":
                 handle.kill()
             except Exception as e:
                 logging.warning("Failed to kill worker process: {0}".format(str(e)))
+                pass
+
+        # Flush all logs and close file handles
+        for log in log_handles:
+            try:
+               log.flush()
+               log.close()
+            except Exception as e:
+                logging.warning("Failed to close log handle: {0}".format(str(e)))
                 pass
 
         # Shutdown the script
