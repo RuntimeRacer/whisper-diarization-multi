@@ -281,7 +281,6 @@ class DiarizeWorker:
             audio,
             chunk_length_s=30,
             batch_size=self.batch_size,
-            generate_kwargs={"task": 'transcribe'},
             return_timestamps="word"
         )
         word_timestamps = []
