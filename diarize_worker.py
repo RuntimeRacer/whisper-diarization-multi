@@ -10,8 +10,9 @@ import torch
 import functools
 import logging
 
+from pika import frame
 from helpers import *
-from transformers import pipeline
+from faster_whisper import WhisperModel
 from pathlib import Path
 from logging import Formatter
 
@@ -35,7 +36,6 @@ class DiarizeWorker:
             push_channel: str,
             processing_dir: str = '~/diarize_worker_tmp/',
             model_name: str = 'medium.en',
-            batch_size: int = 16,
             device: str = 'cuda:0',
             cache_size: int = 1
     ):
@@ -68,7 +68,6 @@ class DiarizeWorker:
 
         # Diarize Params
         self.whisper_model = None
-        self.batch_size = batch_size
 
         # Message Handling params
         self.connection_active = False
@@ -123,34 +122,16 @@ class DiarizeWorker:
                 self.cache_thread.join()
 
     def initialize_whisper(self, model_name="medium.en", compute_type="float16"):
-        # evaluate compute type from string
-        if compute_type == "int8":
-            compute_type = torch.int8
-        elif compute_type == "float32":
-            compute_type = torch.float32
-        elif compute_type == "bfloat16":
-            compute_type = torch.bfloat16
+        # Initialize Whipser on GPU
+        if "cuda:" in self.device:
+            device_target = self.device.split(":")
+            self.whisper_model = WhisperModel(
+                model_name, device=device_target[0], device_index=int(device_target[1]), compute_type=compute_type
+            )
         else:
-            compute_type = torch.float16
-
-        # Initialize Whipser on GPU or CPU
-        try:
-            self.whisper_model = pipeline(
-                "automatic-speech-recognition",
-                model_name,
-                torch_dtype=compute_type,
-                model_kwargs={"use_flash_attention_2": True},
-                device=self.device
+            self.whisper_model = WhisperModel(
+                model_name, device=self.device, compute_type=compute_type
             )
-        except Exception as e:
-            logging.warning("Unable to initialize Whisper with Flash Attention. Using BetterTransformers instead, but will be slower")
-            self.whisper_model = pipeline(
-                "automatic-speech-recognition",
-                model_name,
-                torch_dtype=compute_type,
-                device=self.device
-            )
-            self.whisper_model.model = self.whisper_model.model.to_bettertransformer()
 
     """
     Expecting the following structure in param 'body':    
@@ -277,17 +258,22 @@ class DiarizeWorker:
             audio,
     ):
         # TODO: Add all functionality from base method in diarize_multi.py
-        transcribe_data = self.whisper_model(
+        segments, info = self.whisper_model.transcribe(
             audio,
-            chunk_length_s=30,
-            batch_size=self.batch_size,
-            return_timestamps="word"
+            beam_size=5,
+            word_timestamps=True,
+            suppress_tokens=None,
+            vad_filter=True,
         )
+        whisper_results = []
         word_timestamps = []
-        for word in transcribe_data['chunks']:
-            text = word['text']
-            start, end = word['timestamp']
-            word_timestamps.append({"word": text.strip(), "start": start, "end": end})
+        for segment in segments:
+            whisper_results.append(segment._asdict())
+
+        if len(word_timestamps) == 0:
+            for segment in whisper_results:
+                for word in segment["words"]:
+                    word_timestamps.append({"word": word[2].strip(), "start": word[0], "end": word[1]})
 
         wsm = get_words_mapping(word_timestamps)
         ssm = get_sentences(wsm)
@@ -353,7 +339,6 @@ if __name__ == "__main__":
     # Worker Parameters
     parser.add_argument("-pd", "--processing_dir", type=str, default='diarize_worker_tmp/', help="path to the processing directory to store temporary files")
     parser.add_argument("-cs", "--cache_size", type=int, default=1, help="amount of messages to cache while processing")
-    parser.add_argument("--batch_size", type=int, default=16, help="Batching count ")
     parser.add_argument("--whisper-model", dest="model_name", default="medium.en", help="name of the Whisper model to use")
     parser.add_argument("--device", dest="device", default="cuda:0" if torch.cuda.is_available() else "cpu", help="specifies device to execute this worker on")
 
