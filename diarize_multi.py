@@ -118,13 +118,6 @@ parser.add_argument(
     help="Split Audio files on voice activity and speaker. Does not generate a .srt file.",
 )
 
-parser.add_argument(
-    "-sr", "--sample-rate",
-    dest="sample_rate",
-    default=24000,
-    help="Target sample rate for splitted output files (if split enabled). set to -1 to disable conversion.",
-)
-
 args = parser.parse_args()
 
 
@@ -359,16 +352,14 @@ class DiarizationDeviceThread(threading.Thread):
                     audio,
                     self.global_args.audio_dir,
                     self.global_args.output_dir,
-                    ssm,
-                    self.global_args.sample_rate
+                    ssm
                 )
         else:
             save_transcript_async(
                 audio,
                 self.global_args.audio_dir,
                 self.global_args.output_dir,
-                ssm,
-                self.global_args.sample_rate
+                ssm
             )
 
 

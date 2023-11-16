@@ -338,9 +338,10 @@ def write_srt(transcript, file):
         )
 
 
-def split_by_vad_and_speaker(base_file, base_dir, output_dir, transcript_data, sample_rate):
+def split_by_vad_and_speaker(base_file, base_dir, output_dir, transcript_data):
     # get base file name
-    base_name = os.path.splitext(base_file)[0]
+    file_ext = os.path.splitext(base_file)
+    base_name, base_ext = file_ext[0], file_ext[1]
     base_name = base_name.replace(base_dir, output_dir)
 
     # Group all Segments by speaker
@@ -354,7 +355,7 @@ def split_by_vad_and_speaker(base_file, base_dir, output_dir, transcript_data, s
     for spk_idx, spk_key in enumerate(speakers.keys()):
         speaker_utterances = speakers[spk_key]
         for utt_idx, utt_segment in enumerate(speaker_utterances):
-            utt_audio_name = "{0}_{1}_{2}.flac".format(base_name, spk_idx, utt_idx)
+            utt_audio_name = "{0}_{1}_{2}.{3}".format(base_name, spk_idx, utt_idx, base_ext)
             utt_transcript_name = "{0}_{1}_{2}.txt".format(base_name, spk_idx, utt_idx)
 
             # Create utterance file if it doesen't exist
@@ -370,50 +371,6 @@ def split_by_vad_and_speaker(base_file, base_dir, output_dir, transcript_data, s
                 continue
 
             # Process using FFMPEG
-            if sample_rate > 0:
-                convert_args = [
-                    "/usr/bin/ffmpeg",
-                    "-y",
-                    "-loglevel",
-                    "fatal",
-                    "-i",
-                    str(base_file),
-                    "-ss",
-                    format_timestamp(utt_segment['start_time'], always_include_hours=True),
-                    "-to",
-                    format_timestamp(utt_segment['end_time'], always_include_hours=True),
-                    "-ar",
-                    str(sample_rate),
-                    "-threads",
-                    str(1),
-                    str(utt_audio_name)
-                ]
-                subprocess.Popen(convert_args)
-
-
-def save_transcript_async(base_file, base_dir, output_dir, sentences, sample_rate):
-    # get base file name
-    base_name = os.path.splitext(base_file)[0]
-    base_name = base_name.replace(base_dir, output_dir)
-
-    for sentence_idx, sentence_segment in enumerate(sentences):
-        snt_audio_name = "{0}_{1}.flac".format(base_name, sentence_idx)
-        snt_transcript_name = "{0}_{1}_transcript.txt".format(base_name, sentence_idx)
-
-        # Create utterance file if it doesen't exist
-        dest_utterance_path = Path(snt_transcript_name)
-        os.makedirs(os.path.dirname(dest_utterance_path), exist_ok=True)
-        if not dest_utterance_path.is_file():
-            with open(dest_utterance_path, "w", encoding="utf-8-sig") as out:
-                out.write(sentence_segment["text"].strip())
-
-        # if the file already exists, skip conversion
-        dest_audio_path = Path(snt_audio_name)
-        if dest_audio_path.is_file():
-            continue
-
-        # Process using FFMPEG
-        if sample_rate > 0:
             convert_args = [
                 "/usr/bin/ffmpeg",
                 "-y",
@@ -422,25 +379,24 @@ def save_transcript_async(base_file, base_dir, output_dir, sentences, sample_rat
                 "-i",
                 str(base_file),
                 "-ss",
-                format_timestamp(sentence_segment['start_time'], always_include_hours=True),
+                format_timestamp(utt_segment['start_time'], always_include_hours=True),
                 "-to",
-                format_timestamp(sentence_segment['end_time'], always_include_hours=True),
-                "-ar",
-                str(sample_rate),
+                format_timestamp(utt_segment['end_time'], always_include_hours=True),
                 "-threads",
                 str(1),
-                str(snt_audio_name)
+                str(utt_audio_name)
             ]
             subprocess.Popen(convert_args)
 
 
-def save_transcript_sync(base_file, base_dir, output_dir, sentences, sample_rate):
+def save_transcript_async(base_file, base_dir, output_dir, sentences):
     # get base file name
-    base_name = os.path.splitext(base_file)[0]
+    file_ext = os.path.splitext(base_file)
+    base_name, base_ext = file_ext[0], file_ext[1]
     base_name = base_name.replace(base_dir, output_dir)
 
     for sentence_idx, sentence_segment in enumerate(sentences):
-        snt_audio_name = "{0}_{1}.flac".format(base_name, sentence_idx)
+        snt_audio_name = "{0}_{1}.{2}".format(base_name, sentence_idx, base_ext)
         snt_transcript_name = "{0}_{1}_transcript.txt".format(base_name, sentence_idx)
 
         # Create utterance file if it doesen't exist
@@ -456,25 +412,63 @@ def save_transcript_sync(base_file, base_dir, output_dir, sentences, sample_rate
             continue
 
         # Process using FFMPEG
-        if sample_rate > 0:
-            convert_args = [
-                "/usr/bin/ffmpeg",
-                "-y",
-                "-loglevel",
-                "fatal",
-                "-i",
-                str(base_file),
-                "-ss",
-                format_timestamp(sentence_segment['start_time'], always_include_hours=True),
-                "-to",
-                format_timestamp(sentence_segment['end_time'], always_include_hours=True),
-                "-ar",
-                str(sample_rate),
-                "-threads",
-                str(1),
-                str(snt_audio_name)
-            ]
-            subprocess.call(convert_args)
+        convert_args = [
+            "/usr/bin/ffmpeg",
+            "-y",
+            "-loglevel",
+            "fatal",
+            "-i",
+            str(base_file),
+            "-ss",
+            format_timestamp(sentence_segment['start_time'], always_include_hours=True),
+            "-to",
+            format_timestamp(sentence_segment['end_time'], always_include_hours=True),
+            "-threads",
+            str(1),
+            str(snt_audio_name)
+        ]
+        subprocess.Popen(convert_args)
+
+
+def save_transcript_sync(base_file, base_dir, output_dir, sentences):
+    # get base file name
+    file_ext = os.path.splitext(base_file)
+    base_name, base_ext = file_ext[0], file_ext[1]
+    base_name = base_name.replace(base_dir, output_dir)
+
+    for sentence_idx, sentence_segment in enumerate(sentences):
+        snt_audio_name = "{0}_{1}.{2}".format(base_name, sentence_idx, base_ext)
+        snt_transcript_name = "{0}_{1}_transcript.txt".format(base_name, sentence_idx)
+
+        # Create utterance file if it doesen't exist
+        dest_utterance_path = Path(snt_transcript_name)
+        os.makedirs(os.path.dirname(dest_utterance_path), exist_ok=True)
+        if not dest_utterance_path.is_file():
+            with open(dest_utterance_path, "w", encoding="utf-8-sig") as out:
+                out.write(sentence_segment["text"].strip())
+
+        # if the file already exists, skip conversion
+        dest_audio_path = Path(snt_audio_name)
+        if dest_audio_path.is_file():
+            continue
+
+        # Process using FFMPEG
+        convert_args = [
+            "/usr/bin/ffmpeg",
+            "-y",
+            "-loglevel",
+            "fatal",
+            "-i",
+            str(base_file),
+            "-ss",
+            format_timestamp(sentence_segment['start_time'], always_include_hours=True),
+            "-to",
+            format_timestamp(sentence_segment['end_time'], always_include_hours=True),
+            "-threads",
+            str(1),
+            str(snt_audio_name)
+        ]
+        subprocess.call(convert_args)
 
 
 def find_numeral_symbol_tokens(tokenizer):
