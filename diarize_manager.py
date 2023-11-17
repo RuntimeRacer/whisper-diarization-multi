@@ -265,7 +265,7 @@ class FileUploaderManagerThread(threading.Thread):
 
             file_name = message_metadata['filename']
             for check_path, _, check_files in os.walk(self.global_args.audio_dir):
-                for check_name in files:
+                for check_name in check_files:
                     if file_name == check_name:
                         # Mark file as pending
                         context = {
@@ -277,7 +277,7 @@ class FileUploaderManagerThread(threading.Thread):
                         return context
 
             if context is None:
-                logging.error("Unable to find returned file locally.")
+                logging.error("Unable to find returned file {0} locally within path {1}.".format(file_name, self.global_args.audio_dir))
                 raise e
 
         return context
@@ -501,9 +501,11 @@ for path, _, files in os.walk(args.audio_dir):
             # Check if result file already exists locally
             file_path = os.path.join(path, filename)
             # Determine target fil path and check if initial file exists
-            target_file_path = os.path.splitext(file_path)[0]
-            target_file_path = target_file_path.replace(args.audio_dir, args.output_dir)
-            target_file_path = Path("{0}_{1}.flac".format(target_file_path, 0))
+            file_ext = os.path.splitext(file_path)
+            target_file_name, target_file_ext = file_ext[0], file_ext[1]
+            # Target files are stored inside a target directory
+            target_file_name = target_file_name.replace(args.audio_dir, args.output_dir)
+            target_file_path = Path("{0}/{1}_0{2}".format(target_file_name, Path(target_file_name).stem, target_file_ext))
             if target_file_path.is_file():
                 logging.info("Skipping already transcribed file: {0}".format(file_path))
                 continue
