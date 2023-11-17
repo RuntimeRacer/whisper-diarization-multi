@@ -355,8 +355,8 @@ def split_by_vad_and_speaker(base_file, base_dir, output_dir, transcript_data):
     for spk_idx, spk_key in enumerate(speakers.keys()):
         speaker_utterances = speakers[spk_key]
         for utt_idx, utt_segment in enumerate(speaker_utterances):
-            utt_audio_name = "{0}_{1}_{2}{3}".format(base_name, spk_idx, utt_idx, base_ext)
-            utt_transcript_name = "{0}_{1}_{2}.txt".format(base_name, spk_idx, utt_idx)
+            utt_audio_name = "{0}/{1}_{2}_{3}{4}".format(base_name, Path(base_name).stem, spk_idx, utt_idx, base_ext)
+            utt_transcript_name = "{0}/{1}_{2}_{3}.txt".format(base_name, Path(base_name).stem, spk_idx, utt_idx)
 
             # Create utterance file if it doesen't exist
             dest_utterance_path = Path(utt_transcript_name)
@@ -398,8 +398,8 @@ def save_transcript_async(base_file, base_dir, output_dir, sentences):
     base_name = base_name.replace(base_dir, output_dir)
 
     for sentence_idx, sentence_segment in enumerate(sentences):
-        snt_audio_name = "{0}_{1}{2}".format(base_name, sentence_idx, base_ext)
-        snt_transcript_name = "{0}_{1}_transcript.txt".format(base_name, sentence_idx)
+        snt_audio_name = "{0}/{1}_{2}{3}".format(base_name, Path(base_name).stem, sentence_idx, base_ext)
+        snt_transcript_name = "{0}/{1}_{2}_transcript.txt".format(base_name, Path(base_name).stem, sentence_idx)
 
         # Create utterance file if it doesen't exist
         dest_utterance_path = Path(snt_transcript_name)
@@ -441,8 +441,8 @@ def save_transcript_sync(base_file, base_dir, output_dir, sentences):
     base_name = base_name.replace(base_dir, output_dir)
 
     for sentence_idx, sentence_segment in enumerate(sentences):
-        snt_audio_name = "{0}_{1}{2}".format(base_name, sentence_idx, base_ext)
-        snt_transcript_name = "{0}_{1}_transcript.txt".format(base_name, sentence_idx)
+        snt_audio_name = "{0}/{1}_{2}{3}".format(base_name, Path(base_name).stem, sentence_idx, base_ext)
+        snt_transcript_name = "{0}/{1}_{2}_transcript.txt".format(base_name, Path(base_name).stem, sentence_idx)
 
         # Create utterance file if it doesen't exist
         dest_utterance_path = Path(snt_transcript_name)
