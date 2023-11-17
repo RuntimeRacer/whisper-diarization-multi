@@ -382,6 +382,8 @@ def split_by_vad_and_speaker(base_file, base_dir, output_dir, transcript_data):
                 format_timestamp(utt_segment['start_time'], always_include_hours=True),
                 "-to",
                 format_timestamp(utt_segment['end_time'], always_include_hours=True),
+                "-c:a",
+                "copy",
                 "-threads",
                 str(1),
                 str(utt_audio_name)
@@ -423,6 +425,8 @@ def save_transcript_async(base_file, base_dir, output_dir, sentences):
             format_timestamp(sentence_segment['start_time'], always_include_hours=True),
             "-to",
             format_timestamp(sentence_segment['end_time'], always_include_hours=True),
+            "-c:a",
+            "copy",
             "-threads",
             str(1),
             str(snt_audio_name)
@@ -464,6 +468,8 @@ def save_transcript_sync(base_file, base_dir, output_dir, sentences):
             format_timestamp(sentence_segment['start_time'], always_include_hours=True),
             "-to",
             format_timestamp(sentence_segment['end_time'], always_include_hours=True),
+            "-c:a",
+            "copy",
             "-threads",
             str(1),
             str(snt_audio_name)
