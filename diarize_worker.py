@@ -93,7 +93,7 @@ class DiarizeWorker:
                     heartbeat=1800
                 ))
                 self.polling_channel_ref = self.polling_connection.channel()
-                self.polling_channel_ref.basic_qos(prefetch_count=self.cache_size)
+                self.polling_channel_ref.basic_qos(prefetch_count=self.cache_size+1)
                 self.polling_channel_ref.queue_declare(queue=self.poll_channel, durable=True)
                 self.connection_active = True
                 logging.info("Polling Worker: Successfully connected to RabbitMQ host")
