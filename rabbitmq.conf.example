@@ -379,7 +379,7 @@ max_message_size = 536870911
 # tcp_listen_options.exit_on_close = false
 #
 # tcp_listen_options.keepalive = true
-# tcp_listen_options.send_timeout = 15000
+tcp_listen_options.send_timeout = 30000
 #
 # tcp_listen_options.buffer = 196608
 # tcp_listen_options.sndbuf = 196608
