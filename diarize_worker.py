@@ -178,10 +178,11 @@ class DiarizeWorker:
 
         # Check for Cache capacity and block if reached
         if len(self.cached_messages) > self.cache_size:
-            logging.debug("Cache is full, waiting for clearance...")
-        # while len(self.cached_messages) > self.cache_size:
-        #     time.sleep(5)
-        #     self.polling_connection.process_data_events()
+            # Send log line only once here, to avoid logspam
+            logging.debug("Cache is full, waiting for clearance...".format(message_id))
+            # Wait until cache is cleared
+            while len(self.cached_messages) > self.cache_size:
+                time.sleep(0.1)
 
     def process_cached_messages(self):
         while len(self.cached_messages) > 0:
